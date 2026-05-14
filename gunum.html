@@ -1252,7 +1252,12 @@ function renderNotlar(main){
     const meta=el('div'); meta.style.cssText='font-size:12px;color:#64748b;margin-top:2px'; meta.textContent=n.tarih+(n.kitap?' · 📚 '+n.kitap:'');
     sol.append(baslikEl,meta);
     const silBtn=el('button','mini-btn'); silBtn.textContent='🗑️'; silBtn.style.color='#ef4444';
-    silBtn.onclick=()=>{ state.notlar=state.notlar.filter(x=>x.id!==n.id); kaydet('kitap_notlar',state.notlar); render(); };
+    silBtn.onclick=()=>{ 
+      state.notlar=state.notlar.filter(x=>x.id!==n.id); 
+      kaydet('kitap_notlar',state.notlar); 
+      fbSil('notlar', n.id);
+      render(); 
+    };
     ust2.append(sol,silBtn); kart.appendChild(ust2);
 
     if(n.gorsel){
@@ -1308,7 +1313,12 @@ function renderUrunler(main){
     const duzenle=el('button','mini-btn'); duzenle.textContent='✏️';
     duzenle.onclick=()=>{ state.modal={tip:'urun',veri:{...u}}; render(); };
     const sil=el('button','mini-btn'); sil.textContent='🗑️'; sil.style.color='#ef4444';
-    sil.onclick=()=>{ state.urunler=state.urunler.filter(x=>x.id!==u.id); kaydet('urun_listesi',state.urunler); render(); };
+    sil.onclick=()=>{ 
+      state.urunler=state.urunler.filter(x=>x.id!==u.id); 
+      kaydet('urun_listesi',state.urunler); 
+      fbSil('urunler', u.id);
+      render(); 
+    };
     sagGrp.append(duzenle,sil);
     ust2.append(sol,sagGrp); kart.appendChild(ust2);
 
