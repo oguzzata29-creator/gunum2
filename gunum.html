@@ -138,6 +138,135 @@ textarea.input{resize:vertical}
 <body>
 <div id="app"></div>
 
+<script type="module">
+// ── Firebase ES Module ────────────────────────────────────────────────────────
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB31uWK1kdWMSfGE4vjkJZk6gYj5S9BIjM",
+  authDomain: "gunum-57de4.firebaseapp.com",
+  projectId: "gunum-57de4",
+  storageBucket: "gunum-57de4.firebasestorage.app",
+  messagingSenderId: "945375339295",
+  appId: "1:945375339295:web:ce3fd6d4306901d0fe862a"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// Global erişim için window'a ekle
+window._fbAuth = auth;
+window._fbDb = db;
+window._fbFns = { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, doc, setDoc, getDoc, collection, getDocs, deleteDoc };
+
+// Auth state listener
+onAuthStateChanged(auth, user => {
+  window.fbUser = user;
+  window.fbAuthHazir = true;
+  if(user){
+    window.fbSyncBaslat && window.fbSyncBaslat();
+  } else {
+    window.render && window.render();
+  }
+});
+</script>
+
+
+<script>
+// ── Ana Uygulama ──────────────────────────────────────────────────────────────
+let fbUser = null;
+let fbAuthHazir = false;
+
+// Firebase fonksiyonları - ES module script'ten gelir
+function getDb(){ return window._fbDb; }
+function getAuth2(){ return window._fbAuth; }
+
+async function fbKaydet(koleksiyon, id, veri){
+  if(!window.fbUser) return;
+  try{
+    const {doc, setDoc} = window._fbFns;
+    await setDoc(doc(getDb(),'users',window.fbUser.uid,koleksiyon,id), veri, {merge:true});
+  }catch(e){ console.warn('FB kaydet:', e.message); }
+}
+
+async function fbSil(koleksiyon, id){
+  if(!window.fbUser) return;
+  try{
+    const {doc, deleteDoc} = window._fbFns;
+    await deleteDoc(doc(getDb(),'users',window.fbUser.uid,koleksiyon,id));
+  }catch(e){ console.warn('FB sil:', e.message); }
+}
+
+async function fbYukle(koleksiyon){
+  if(!window.fbUser) return [];
+  try{
+    const {collection, getDocs} = window._fbFns;
+    const snap = await getDocs(collection(getDb(),'users',window.fbUser.uid,koleksiyon));
+    return snap.docs.map(d=>d.data());
+  }catch(e){ console.warn('FB yükle:', e.message); return []; }
+}
+
+async function fbAyarKaydet(ayarlar){
+  if(!window.fbUser) return;
+  try{
+    const {doc, setDoc} = window._fbFns;
+    await setDoc(doc(getDb(),'users',window.fbUser.uid), {ayarlar}, {merge:true});
+  }catch(e){}
+}
+
+async function fbAyarYukle(){
+  if(!window.fbUser) return null;
+  try{
+    const {doc, getDoc} = window._fbFns;
+    const d = await getDoc(doc(getDb(),'users',window.fbUser.uid));
+    return d.exists() ? d.data().ayarlar : null;
+  }catch(e){ return null; }
+}
+
+window.fbSyncBaslat = async function(){
+  if(!window.fbUser) return;
+  const fbAyarlar = await fbAyarYukle();
+  if(fbAyarlar){ state.ayarlar={...state.ayarlar,...fbAyarlar}; kaydet('ayarlar',state.ayarlar); }
+  const fbNotlar = await fbYukle('notlar');
+  if(fbNotlar.length>0){ state.notlar=fbNotlar; kaydet('kitap_notlar',state.notlar); }
+  const fbUrunler = await fbYukle('urunler');
+  if(fbUrunler.length>0){ state.urunler=fbUrunler; kaydet('urun_listesi',state.urunler); }
+  const fbPlanlar = await fbYukle('planlar');
+  fbPlanlar.forEach(p=>{ if(p.tarih&&p.bloklar) kaydet('plan_'+p.tarih,p.bloklar); });
+  render();
+  bildirimGoster('Veriler senkronize edildi ✓');
+};
+
+function fbGirisEkrani(app){
+  const div=el('div');
+  div.style.cssText='min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;background:#0f172a';
+  div.innerHTML=`
+    <div style="font-size:48px;margin-bottom:16px">📋</div>
+    <h1 style="color:#e2e8f0;font-size:24px;font-weight:700;margin-bottom:8px">Günüm</h1>
+    <p style="color:#94a3b8;font-size:14px;margin-bottom:32px;text-align:center">Günlük planlayıcın.<br>Tüm cihazlarında senkronize.</p>
+    <button id="googleGirisBtn" style="display:flex;align-items:center;gap:10px;background:white;color:#1f2937;border:none;border-radius:12px;padding:14px 24px;font-size:15px;font-weight:600;cursor:pointer;width:100%;max-width:280px;justify-content:center">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Google ile Giriş Yap
+    </button>
+    <p style="color:#475569;font-size:12px;margin-top:20px;text-align:center">Veriler Google hesabında güvenle saklanır</p>`;
+  app.appendChild(div);
+  document.getElementById('googleGirisBtn').onclick=async()=>{
+    try{
+      const {signInWithPopup, GoogleAuthProvider} = window._fbFns;
+      await signInWithPopup(getAuth2(), new GoogleAuthProvider());
+    }catch(e){ bildirimGoster('Giriş başarısız: '+e.message,'hata'); }
+  };
+}
+
+// İlk yükleme göstergesi
+document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px"><div class="spinner"></div><span style="color:#64748b;font-size:14px">Yükleniyor...</span></div>';
+
+window.render = function(){ render(); };
+</script>
+
 <script>
 // ── Veri ──────────────────────────────────────────────────────────────────────
 const KATEGORILER = [
@@ -149,7 +278,7 @@ const KATEGORILER = [
   {id:'diger',  label:'Diğer',     emoji:'✦',  renk:'#94a3b8', cid:'8'},
 ];
 
-const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.send';
+const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/documents';
 
 let state = {
   ekran: 'plan',
@@ -159,6 +288,8 @@ let state = {
   notlar: yukle('kitap_notlar', []),
   urunler: yukle('urun_listesi', []),
   ayarlar: yukle('ayarlar', {clientId:'', apiKey:'', email:'', geminiKey:''}),
+  sheetId: yukle('sheet_id', null),
+  docId: yukle('doc_id', null),
   modal: null,
   gapiHazir: false,
   giris: false,
@@ -308,6 +439,8 @@ async function blokKaydet(blok){
   else state.bloklar.push(yeni);
   state.bloklar.sort((a,b)=>a.baslangic.localeCompare(b.baslangic));
   kaydEtBloklari();
+  // Firebase'e kaydet
+  fbKaydet('planlar', state.tarih, {tarih: state.tarih, bloklar: state.bloklar});
   state.modal=null;
   yukleniyor(false);
   render();
@@ -322,6 +455,7 @@ async function blokSil(blok){
   }
   state.bloklar=state.bloklar.filter(b=>b.id!==blok.id);
   kaydEtBloklari();
+  fbKaydet('planlar', state.tarih, {tarih: state.tarih, bloklar: state.bloklar});
   bildirimGoster('Blok silindi');
   render();
 }
@@ -329,6 +463,7 @@ async function blokSil(blok){
 function tamamlandiToggle(id,durum){
   state.bloklar=state.bloklar.map(b=>b.id===id?{...b,tamamlandi:durum}:b);
   kaydEtBloklari();
+  fbKaydet('planlar', state.tarih, {tarih: state.tarih, bloklar: state.bloklar});
   render();
 }
 
@@ -417,6 +552,12 @@ function render(){
   const app=document.getElementById('app');
   app.innerHTML='';
 
+  // Firebase giriş kontrolü
+  if(!window.fbUser){
+    fbGirisEkrani(app);
+    return;
+  }
+
   // Header
   const header=el('div','header');
   const logoDiv=el('div');
@@ -443,6 +584,15 @@ function render(){
     gBtn.onclick=()=>{state.ekran='ayarlar';render();};
   }
   header.appendChild(gBtn);
+
+  // Firebase kullanıcı + çıkış
+  if(window.fbUser){
+    const fbBtn=el('button');
+    fbBtn.style.cssText='background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;padding:4px 8px;border-radius:8px';
+    fbBtn.textContent='👤 '+window.fbUser.displayName?.split(' ')[0];
+    fbBtn.onclick=()=>{ if(confirm('Çıkış yapmak istiyor musun?')){ const {signOut}=window._fbFns; signOut(window._fbAuth); } };
+    header.appendChild(fbBtn);
+  }
   app.appendChild(header);
 
   // Tarih bar
@@ -503,6 +653,12 @@ function renderPlan(main){
     sb.textContent='💾 Şablon Kaydet';
     sb.onclick=sablonKaydet;
     ust.appendChild(sb);
+
+    const shBtn=el('button');
+    shBtn.style.cssText='background:#0f9d58;border:none;color:white;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer';
+    shBtn.textContent='📊 Sheets';
+    shBtn.onclick=planSheetsEkle;
+    ust.appendChild(shBtn);
   }
   main.appendChild(ust);
 
@@ -695,6 +851,7 @@ function renderAyarlar(main){
     inp.onchange=e=>{
       state.ayarlar[key]=e.target.value;
       kaydet('ayarlar',state.ayarlar);
+      fbAyarKaydet(state.ayarlar);
       if(key==='clientId'||key==='apiKey') gapiBaslat();
     };
     g.append(lbl,inp); main.appendChild(g);
@@ -787,7 +944,130 @@ function renderModalSure(){
   el2.innerHTML=dk>0?'Süre: <strong style="color:'+katRenk(v.kategori)+'">'+sureFmt(v.baslangic,v.bitis)+'</strong>':'';
 }
 
-// ── Kitap Notları Ekranı ──────────────────────────────────────────────────────
+// ── Google Sheets & Docs ──────────────────────────────────────────────────────
+async function driveFetch(method, url, body){
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Authorization': 'Bearer '+state.accessToken,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||res.statusText); }
+  return res.json();
+}
+
+async function sheetGetOrCreate(){
+  if(state.sheetId) return state.sheetId;
+  // Yeni spreadsheet oluştur
+  const res = await driveFetch('POST','https://sheets.googleapis.com/v4/spreadsheets',{
+    properties:{ title:'Günüm — Ürün Keşif Listesi' },
+    sheets:[{
+      properties:{ title:'Ürünler' },
+      data:[{ rowData:[{ values:[
+        {userEnteredValue:{stringValue:'Tarih'}},
+        {userEnteredValue:{stringValue:'Ürün Adı'}},
+        {userEnteredValue:{stringValue:'Video Linki'}},
+        {userEnteredValue:{stringValue:'Sosyal Medya'}},
+        {userEnteredValue:{stringValue:'Not'}},
+      ]}]}]
+    }]
+  });
+  state.sheetId = res.spreadsheetId;
+  kaydet('sheet_id', state.sheetId);
+  return state.sheetId;
+}
+
+async function urunSheetsEkle(urun){
+  if(!state.giris||!state.accessToken){ bildirimGoster('Google hesabına giriş yap','uyari'); return; }
+  yukleniyor(true);
+  try{
+    const id = await sheetGetOrCreate();
+    await driveFetch('POST',
+      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Ürünler!A:E:append?valueInputOption=RAW`,
+      { values:[[urun.tarih, urun.ad, urun.videoLink||'', urun.sosyalLink||'', urun.not||'']] }
+    );
+    bildirimGoster('Sheets\'e eklendi ✓ 📊');
+    // Sheets linkini kaydet
+    kaydet('sheet_url', `https://docs.google.com/spreadsheets/d/${id}`);
+    state.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}`;
+  }catch(e){ bildirimGoster('Sheets hatası: '+e.message,'hata'); }
+  yukleniyor(false);
+}
+
+async function docGetOrCreate(){
+  if(state.docId) return state.docId;
+  const res = await driveFetch('POST','https://docs.googleapis.com/v1/documents',{
+    title:'Günüm — Kitap Notlarım'
+  });
+  state.docId = res.documentId;
+  kaydet('doc_id', state.docId);
+  return state.docId;
+}
+
+async function notDocsEkle(not){
+  if(!state.giris||!state.accessToken){ bildirimGoster('Google hesabına giriş yap','uyari'); return; }
+  yukleniyor(true);
+  try{
+    const id = await docGetOrCreate();
+    // Belgenin sonuna not ekle
+    const doc = await driveFetch('GET',`https://docs.googleapis.com/v1/documents/${id}`);
+    const endIndex = doc.body.content[doc.body.content.length-1].endIndex - 1;
+    
+    await driveFetch('POST',`https://docs.googleapis.com/v1/documents/${id}:batchUpdate`,{
+      requests:[
+        { insertText:{ location:{index:endIndex}, text:`\n\n${not.baslik}\n${not.tarih}${not.kitap?' | 📚 '+not.kitap:''}\n\n${not.ozet}\n\n---` } },
+        { updateParagraphStyle:{
+          range:{startIndex:endIndex+2, endIndex:endIndex+2+not.baslik.length},
+          paragraphStyle:{namedStyleType:'HEADING_2'},
+          fields:'namedStyleType'
+        }}
+      ]
+    });
+    bildirimGoster('Docs\'a eklendi ✓ 📄');
+    state.docUrl = `https://docs.google.com/document/d/${id}`;
+    kaydet('doc_url', state.docUrl);
+  }catch(e){ bildirimGoster('Docs hatası: '+e.message,'hata'); }
+  yukleniyor(false);
+}
+
+async function planSheetsEkle(){
+  if(!state.giris||!state.accessToken){ bildirimGoster('Google hesabına giriş yap','uyari'); return; }
+  if(state.bloklar.length===0){ bildirimGoster('Önce plan ekle','uyari'); return; }
+  yukleniyor(true);
+  try{
+    const id = await sheetGetOrCreate();
+    // Plan sekmesi var mı kontrol et, yoksa ekle
+    const ss = await driveFetch('GET',`https://sheets.googleapis.com/v4/spreadsheets/${id}`);
+    const planSheet = ss.sheets.find(s=>s.properties.title==='Günlük Plan');
+    if(!planSheet){
+      await driveFetch('POST',`https://sheets.googleapis.com/v4/spreadsheets/${id}:batchUpdate`,{
+        requests:[{ addSheet:{ properties:{title:'Günlük Plan'} } }]
+      });
+      // Başlık satırı ekle
+      await driveFetch('POST',
+        `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Günlük Plan!A:F:append?valueInputOption=RAW`,
+        { values:[['Tarih','Başlangıç','Bitiş','Aktivite','Kategori','Durum']] }
+      );
+    }
+    const satirlar = state.bloklar.map(b=>([
+      state.tarih, b.baslangic, b.bitis, b.baslik,
+      KATEGORILER.find(k=>k.id===b.kategori)?.label||b.kategori,
+      b.tamamlandi===true?'✅ Tamamlandı':b.tamamlandi===false?'❌ Kaçırıldı':'⬜ Belirsiz'
+    ]));
+    await driveFetch('POST',
+      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Günlük Plan!A:F:append?valueInputOption=RAW`,
+      { values: satirlar }
+    );
+    bildirimGoster('Plan Sheets\'e kaydedildi ✓ 📊');
+    state.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}`;
+    kaydet('sheet_url', state.sheetUrl);
+  }catch(e){ bildirimGoster('Sheets hatası: '+e.message,'hata'); }
+  yukleniyor(false);
+}
+
+
 async function gorseldenNotOlustur(dosya){
   if(!state.ayarlar.geminiKey){ bildirimGoster('Ayarlardan Gemini API Key gir','hata'); return null; }
   return new Promise((resolve)=>{
@@ -863,6 +1143,15 @@ function renderNotlar(main){
     wordBtn.textContent='📄 Word İndir';
     wordBtn.onclick=()=>wordIndir(state.notlar);
     btnGrp.appendChild(wordBtn);
+
+    const docsBtn=el('button','sablon-btn');
+    docsBtn.style.cssText='background:#1a73e8;border:none;color:white;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer';
+    docsBtn.textContent='📝 Docs\'a Aktar';
+    docsBtn.onclick=async()=>{
+      for(const n of state.notlar){ await notDocsEkle(n); }
+      if(state.docUrl){ window.open(state.docUrl,'_blank'); }
+    };
+    btnGrp.appendChild(docsBtn);
   }
   ust.append(baslik,btnGrp);
   main.appendChild(ust);
@@ -888,6 +1177,7 @@ function renderNotlar(main){
       };
       state.notlar.unshift(not);
       kaydet('kitap_notlar',state.notlar);
+      fbKaydet('notlar', not.id, {...not, gorsel: ''});
       render();
       bildirimGoster('Not kaydedildi ✓');
     }
@@ -947,9 +1237,21 @@ async function dosyaBase64(dosya){
 function renderUrunler(main){
   const ust=el('div'); ust.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
   const bilgi=el('div'); bilgi.style.cssText='color:#94a3b8;font-size:13px'; bilgi.textContent=state.urunler.length+' ürün kaydedildi';
+  const sagGrpU=el('div'); sagGrpU.style.cssText='display:flex;gap:8px';
   const ekleBtn2=el('button','sablon-btn'); ekleBtn2.textContent='+ Ürün Ekle';
   ekleBtn2.onclick=()=>{ state.modal={tip:'urun',veri:{id:uid(),ad:'',videoLink:'',sosyalLink:'',not:'',tarih:new Date().toLocaleDateString('tr-TR')}}; render(); };
-  ust.append(bilgi,ekleBtn2); main.appendChild(ust);
+  sagGrpU.appendChild(ekleBtn2);
+  if(state.urunler.length>0){
+    const sheetsBtn=el('button');
+    sheetsBtn.style.cssText='background:#0f9d58;border:none;color:white;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer';
+    sheetsBtn.textContent='📊 Sheets\'e Aktar';
+    sheetsBtn.onclick=async()=>{
+      for(const u of state.urunler){ await urunSheetsEkle(u); }
+      if(state.sheetUrl) window.open(state.sheetUrl,'_blank');
+    };
+    sagGrpU.appendChild(sheetsBtn);
+  }
+  ust.append(bilgi,sagGrpU); main.appendChild(ust);
 
   if(state.urunler.length===0){
     const bos=el('div','bos');
@@ -1027,6 +1329,7 @@ function renderUrunModal(app){
     if(idx>=0) state.urunler[idx]=state.modal.veri;
     else state.urunler.unshift(state.modal.veri);
     kaydet('urun_listesi',state.urunler);
+    fbKaydet('urunler', state.modal.veri.id, state.modal.veri);
     state.modal=null; render();
     bildirimGoster('Ürün kaydedildi ✓');
   };
@@ -1122,7 +1425,7 @@ function el(tag,cls=''){
 }
 
 // ── Başlat ────────────────────────────────────────────────────────────────────
-render();
+// render() Firebase auth callback'ten çağrılıyor, burada çağırmıyoruz
 if(state.ayarlar.clientId && state.ayarlar.apiKey) gapiBaslat();
 </script>
 </body>
