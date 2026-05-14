@@ -159,6 +159,7 @@ let state = {
   modal: null,
   gapiHazir: false,
   giris: false,
+  accessToken: null,
   yukleniyor: false,
 };
 
@@ -178,54 +179,74 @@ function kaydEtBloklari(){ kaydet('plan_'+state.tarih, state.bloklar); }
 
 yukleBloklari(state.tarih);
 
-// ── Google API ────────────────────────────────────────────────────────────────
+// ── Google API (GIS + GAPI) ───────────────────────────────────────────────────
+let tokenClient = null;
+
+// URL'deki access token'ı kontrol et (redirect sonrası)
+function tokenKontrol(){
+  const hash = window.location.hash;
+  if(hash.includes('access_token')){
+    const params = new URLSearchParams(hash.slice(1));
+    const token = params.get('access_token');
+    if(token){
+      state.accessToken = token;
+      state.giris = true;
+      // Hash'i temizle
+      history.replaceState(null,'',window.location.pathname+window.location.search);
+      gapiClientBaslat();
+    }
+  }
+}
+
 function gapiBaslat(){
   if(!state.ayarlar.clientId||!state.ayarlar.apiKey) return;
   if(window._gapiLoading) return;
   window._gapiLoading=true;
+
+  // Önce token kontrol et
+  tokenKontrol();
+
   const s=document.createElement('script');
   s.src='https://apis.google.com/js/api.js';
   s.onload=()=>{
-    gapi.load('client:auth2',async()=>{
-      try{
-        await gapi.client.init({
-          apiKey: state.ayarlar.apiKey,
-          clientId: state.ayarlar.clientId,
-          scope: SCOPES,
-        });
-        // Calendar ve Gmail API'lerini manuel yükle
-        await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest');
-        await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest');
-        state.gapiHazir=true;
-        const auth=gapi.auth2.getAuthInstance();
-        state.giris=auth.isSignedIn.get();
-        auth.isSignedIn.listen(v=>{state.giris=v;render();});
-        render();
-      }catch(e){
-        console.warn('gapi hata',e);
-        // Discovery docs yüklenemese bile devam et
-        try{
-          state.gapiHazir=true;
-          const auth=gapi.auth2.getAuthInstance();
-          state.giris=auth.isSignedIn.get();
-          auth.isSignedIn.listen(v=>{state.giris=v;render();});
-          render();
-        }catch(e2){console.warn('gapi fallback hata',e2);}
+    gapi.load('client',async()=>{
+      await gapi.client.init({ apiKey: state.ayarlar.apiKey });
+      state.gapiHazir=true;
+      if(state.accessToken){
+        gapi.client.setToken({access_token: state.accessToken});
       }
+      render();
     });
   };
-  s.onerror=()=>{ window._gapiLoading=false; };
   document.body.appendChild(s);
 }
 
-async function googleGiris(){
-  if(!state.gapiHazir){bildirimGoster('Google API hazır değil','hata');return;}
-  try{ await gapi.auth2.getAuthInstance().signIn();bildirimGoster('Google hesabına bağlandı ✓'); }
-  catch(e){ bildirimGoster('Giriş iptal edildi','uyari'); }
+function gapiClientBaslat(){
+  if(window.gapi && window.gapi.client){
+    gapi.client.setToken({access_token: state.accessToken});
+    render();
+  }
 }
-async function googleCikis(){
-  await gapi.auth2.getAuthInstance().signOut();
+
+function googleGiris(){
+  if(!state.ayarlar.clientId){ bildirimGoster('Client ID girilmedi','hata'); return; }
+  // Implicit flow ile redirect - popup yok, CSP sorunu yok
+  const params = new URLSearchParams({
+    client_id: state.ayarlar.clientId,
+    redirect_uri: window.location.href.split('#')[0].split('?')[0],
+    response_type: 'token',
+    scope: SCOPES,
+    include_granted_scopes: 'true',
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+}
+
+function googleCikis(){
+  state.accessToken = null;
+  state.giris = false;
+  if(window.gapi && window.gapi.client) gapi.client.setToken(null);
   bildirimGoster('Çıkış yapıldı');
+  render();
 }
 
 // ── Bildirim ──────────────────────────────────────────────────────────────────
@@ -241,10 +262,23 @@ function bildirimGoster(mesaj,tip='ok'){
 }
 
 // ── Blok işlemleri ────────────────────────────────────────────────────────────
+async function calendarFetch(method, url, body){
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Authorization': 'Bearer '+state.accessToken,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||res.statusText); }
+  return method==='DELETE' ? null : res.json();
+}
+
 async function blokKaydet(blok){
   yukleniyor(true);
   let yeni={...blok};
-  if(state.giris){
+  if(state.giris && state.accessToken){
     try{
       const etkinlik={
         summary: katEmoji(blok.kategori)+' '+blok.baslik,
@@ -254,13 +288,17 @@ async function blokKaydet(blok){
         colorId: katCid(blok.kategori),
       };
       if(blok.calendarEventId){
-        await gapi.client.calendar.events.update({calendarId:'primary',eventId:blok.calendarEventId,resource:etkinlik});
+        await calendarFetch('PUT',
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${blok.calendarEventId}`,
+          etkinlik);
       } else {
-        const res=await gapi.client.calendar.events.insert({calendarId:'primary',resource:etkinlik});
-        yeni.calendarEventId=res.result.id;
+        const res=await calendarFetch('POST',
+          'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+          etkinlik);
+        yeni.calendarEventId=res.id;
       }
       bildirimGoster('Google Calendar\'a eklendi ✓');
-    }catch(e){ bildirimGoster('Calendar hatası: '+(e.result?.error?.message??e.message),'hata'); }
+    }catch(e){ bildirimGoster('Calendar hatası: '+e.message,'hata'); }
   }
   const idx=state.bloklar.findIndex(b=>b.id===blok.id);
   if(idx>=0) state.bloklar[idx]=yeni;
@@ -273,8 +311,11 @@ async function blokKaydet(blok){
 }
 
 async function blokSil(blok){
-  if(blok.calendarEventId&&state.giris){
-    try{ await gapi.client.calendar.events.delete({calendarId:'primary',eventId:blok.calendarEventId}); }catch{}
+  if(blok.calendarEventId && state.giris && state.accessToken){
+    try{
+      await calendarFetch('DELETE',
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${blok.calendarEventId}`);
+    }catch{}
   }
   state.bloklar=state.bloklar.filter(b=>b.id!==blok.id);
   kaydEtBloklari();
@@ -318,7 +359,7 @@ function sablonSil(id){
 
 // ── Rapor gönder ──────────────────────────────────────────────────────────────
 async function raporGonder(){
-  if(!state.giris){bildirimGoster('Önce Google hesabına giriş yap','uyari');return;}
+  if(!state.giris||!state.accessToken){bildirimGoster('Önce Google hesabına giriş yap','uyari');return;}
   if(!state.ayarlar.email){bildirimGoster('Ayarlardan e-posta adresini gir','uyari');return;}
   yukleniyor(true);
   const {tam,kac}=raporHesapla();
@@ -344,9 +385,17 @@ async function raporGonder(){
     'Subject: =?utf-8?B?'+btoa(unescape(encodeURIComponent('Günlük Rapor — '+state.tarih)))+'?=','',html].join('\n');
   const encoded=btoa(unescape(encodeURIComponent(mesaj))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   try{
-    await gapi.client.gmail.users.messages.send({userId:'me',resource:{raw:encoded}});
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer '+state.accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({raw: encoded}),
+    });
+    if(!res.ok) throw new Error((await res.json()).error?.message);
     bildirimGoster('Rapor gönderildi ✓');
-  }catch(e){ bildirimGoster('Mail hatası: '+(e.result?.error?.message??e.message),'hata'); }
+  }catch(e){ bildirimGoster('Mail hatası: '+e.message,'hata'); }
   yukleniyor(false);
 }
 
