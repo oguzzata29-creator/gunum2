@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Günüm — Günlük Planlayıcı</title>
+<style>
+:root {
+  --bg: #0f172a; --bg2: #1e293b; --bg3: #334155;
+  --txt: #e2e8f0; --txt2: #94a3b8; --txt3: #64748b;
+  --blue: #3b82f6; --green: #22c55e; --red: #ef4444; --yellow: #f59e0b;
+  --border: #334155;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+#app{max-width:430px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:80px}
+
+/* Header */
+.header{padding:18px 16px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:20}
+.logo{font-size:19px;font-weight:700;letter-spacing:-0.5px}
+.logo span{color:var(--blue)}
+.g-btn{display:flex;align-items:center;gap:5px;padding:6px 13px;border-radius:20px;border:1px solid;font-size:12px;font-weight:600;cursor:pointer;background:transparent}
+.g-btn.connected{color:var(--green);border-color:#22c55e44}
+.g-btn.disconnected{color:#fff;border-color:var(--blue);background:var(--blue)}
+
+/* Date bar */
+.date-bar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--bg)}
+.date-nav{background:var(--bg2);border:none;color:var(--txt2);width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.date-input{flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:6px 10px;font-size:13px;outline:none;text-align:center}
+input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1)}
+input[type="time"]::-webkit-calendar-picker-indicator{filter:invert(1)}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:57px;z-index:19}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--txt3);cursor:pointer;font-size:11px;transition:color .2s}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.tab-icon{font-size:15px}
+
+/* Main */
+.main{padding:14px 14px 20px}
+
+/* Blok kart */
+.blok-kart{background:var(--bg2);border-radius:12px;padding:11px 13px;border-left:3px solid var(--border);margin-bottom:9px;transition:opacity .2s}
+.blok-kart.tamamlandi{border-left-color:var(--green)}
+.blok-kart.kacirildi{border-left-color:var(--red);opacity:.75}
+.blok-icerik{display:flex;align-items:center;gap:9px}
+.check-group{display:flex;flex-direction:column;gap:4px}
+.check-btn{width:24px;height:24px;border-radius:6px;border:1.5px solid;background:transparent;cursor:pointer;font-size:12px;color:#fff;display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s}
+.check-btn.ok{border-color:var(--green)}
+.check-btn.ok.active{background:var(--green)}
+.check-btn.no{border-color:var(--red)}
+.check-btn.no.active{background:var(--red)}
+.blok-bilgi{flex:1;min-width:0}
+.blok-baslik{font-weight:600;font-size:15px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blok-baslik.kacirildi{text-decoration:line-through;color:var(--txt3)}
+.blok-alt{font-size:12px;color:var(--txt2);margin-top:2px}
+.blok-not{font-size:11px;color:var(--txt3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blok-actions{display:flex;gap:4px}
+.mini-btn{background:none;border:none;cursor:pointer;font-size:14px;padding:4px;color:var(--txt2)}
+
+/* Ekle butonu */
+.ekle-btn{width:100%;margin-top:14px;background:linear-gradient(135deg,#1d4ed8,var(--blue));color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;letter-spacing:.2px}
+.sablon-btn{background:var(--bg3);border:none;color:var(--txt2);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
+
+/* Boş ekran */
+.bos{display:flex;flex-direction:column;align-items:center;padding:48px 20px;text-align:center}
+.bos-icon{font-size:44px;margin-bottom:12px}
+.bos-txt{color:var(--txt2);line-height:1.6;font-size:14px}
+
+/* Özet kartlar */
+.ozet-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px}
+.ozet-kart{background:var(--bg2);border-radius:12px;padding:14px 8px;text-align:center;border-top:2px solid}
+.ozet-sayi{font-size:26px;font-weight:700}
+.ozet-label{font-size:11px;color:var(--txt2);margin-top:3px}
+.progress-bar-wrap{height:10px;background:var(--bg2);border-radius:10px;overflow:hidden;margin-bottom:6px}
+.progress-bar{height:100%;border-radius:10px;transition:width .5s ease}
+.progress-label{font-size:12px;color:var(--txt3);text-align:center;margin-bottom:18px}
+.section-title{font-size:12px;font-weight:600;color:var(--txt3);margin-bottom:10px;letter-spacing:.5px}
+.kat-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.kat-bar-wrap{flex:1}
+.kat-bar-top{display:flex;justify-content:space-between;margin-bottom:3px;font-size:12px}
+.kat-bar{height:4px;background:var(--bg2);border-radius:4px;overflow:hidden}
+.kat-bar-fill{height:100%;border-radius:4px}
+.rapor-liste-row{display:flex;align-items:center;gap:9px;padding:10px 0;border-bottom:1px solid var(--bg2)}
+.rapor-gonder{width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,#1d4ed8,var(--blue));color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:18px}
+.rapor-gonder:disabled{opacity:.5;cursor:not-allowed}
+
+/* Şablon */
+.sablon-kart{background:var(--bg2);border-radius:12px;padding:13px;border-left:3px solid var(--blue);margin-bottom:10px}
+.sablon-kart-ust{display:flex;justify-content:space-between;align-items:flex-start}
+.sablon-isim{font-weight:600;font-size:15px;color:var(--txt)}
+.sablon-meta{font-size:12px;color:var(--txt3);margin-top:2px}
+.sablon-preview{font-size:12px;color:var(--txt2);margin-top:6px}
+.sablon-uygula{background:var(--bg3);border:none;color:var(--txt2);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
+
+/* Ayarlar */
+.ayar-bilgi{background:var(--bg2);border-radius:12px;padding:14px;margin-bottom:18px;font-size:12px;color:var(--txt2);line-height:1.8}
+.ayar-bilgi a{color:var(--blue)}
+.ayar-grup{margin-bottom:14px}
+.label{font-size:12px;font-weight:600;color:var(--txt3);display:block;margin-bottom:6px}
+.input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--txt);border-radius:10px;padding:10px 12px;font-size:14px;outline:none;font-family:inherit}
+.input:focus{border-color:var(--blue)}
+.ayar-not{font-size:12px;color:var(--txt3);background:var(--bg2);border-radius:8px;padding:12px;margin-top:4px}
+
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;z-index:100}
+.modal{background:var(--bg2);border-radius:20px 20px 0 0;padding:22px 18px 36px;width:100%;max-width:430px;max-height:92vh;overflow-y:auto}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.modal-title{font-size:17px;font-weight:700;color:var(--txt)}
+.modal-kapat{background:none;border:none;color:var(--txt2);font-size:20px;cursor:pointer}
+.form-row{margin-bottom:13px}
+.time-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px}
+.kat-secim{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
+.kat-chip{padding:6px 11px;border-radius:20px;border:2px solid transparent;font-size:12px;cursor:pointer;background:var(--bg);color:var(--txt2);transition:all .15s}
+.sure-preview{text-align:center;font-size:13px;color:var(--txt2);margin-bottom:12px}
+.modal-footer{display:flex;gap:9px;margin-top:18px}
+.iptal-btn{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--txt2);font-size:14px;cursor:pointer}
+.kaydet-btn{flex:2;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#1d4ed8,var(--blue));color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+.kaydet-btn:disabled{opacity:.5;cursor:not-allowed}
+textarea.input{resize:vertical}
+
+/* Bildirim */
+.bildirim{position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:20px;color:#fff;font-size:13px;font-weight:600;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.4);white-space:nowrap;animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;top:0}to{opacity:1;top:16px}}
+
+/* Yükleniyor */
+.loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:200}
+.loading-box{background:var(--bg2);border-radius:16px;padding:24px 32px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.spinner{width:32px;height:32px;border:3px solid var(--bg3);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:4px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ── Veri ──────────────────────────────────────────────────────────────────────
+const KATEGORILER = [
+  {id:'spor',   label:'Spor',      emoji:'🏃', renk:'#4ade80', cid:'2'},
+  {id:'is',     label:'İş',        emoji:'💼', renk:'#60a5fa', cid:'9'},
+  {id:'kisisel',label:'Gelişim',   emoji:'📚', renk:'#f59e0b', cid:'5'},
+  {id:'yemek',  label:'Yemek',     emoji:'☕', renk:'#fb923c', cid:'6'},
+  {id:'sosyal', label:'Sosyal',    emoji:'👥', renk:'#a78bfa', cid:'3'},
+  {id:'diger',  label:'Diğer',     emoji:'✦',  renk:'#94a3b8', cid:'8'},
+];
+
+const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.send';
+
+let state = {
+  ekran: 'plan',
+  tarih: bugunTarihi(),
+  bloklar: [],
+  sablonlar: yukle('sablonlar', []),
+  ayarlar: yukle('ayarlar', {clientId:'', apiKey:'', email:''}),
+  modal: null,
+  gapiHazir: false,
+  giris: false,
+  yukleniyor: false,
+};
+
+function bugunTarihi(){ return new Date().toISOString().split('T')[0]; }
+function yukle(k,d){ try{return JSON.parse(localStorage.getItem(k))??d}catch{return d} }
+function kaydet(k,v){ localStorage.setItem(k,JSON.stringify(v)); }
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function dkFark(a,b){ const[ah,am]=a.split(':').map(Number);const[bh,bm]=b.split(':').map(Number);return(bh*60+bm)-(ah*60+am); }
+function sureFmt(a,b){ const d=dkFark(a,b);if(d<=0)return'—';const h=Math.floor(d/60),m=d%60;if(!h)return m+'dk';if(!m)return h+'s';return h+'s '+m+'dk'; }
+function katEmoji(id){ return KATEGORILER.find(k=>k.id===id)?.emoji??'✦'; }
+function katRenk(id){ return KATEGORILER.find(k=>k.id===id)?.renk??'#94a3b8'; }
+function katCid(id){ return KATEGORILER.find(k=>k.id===id)?.cid??'8'; }
+function saatDate(tarih,saat){ const[h,m]=saat.split(':').map(Number);const d=new Date(tarih);d.setHours(h,m,0,0);return d.toISOString(); }
+
+function yukleBloklari(t){ state.bloklar = yukle('plan_'+t,[]); }
+function kaydEtBloklari(){ kaydet('plan_'+state.tarih, state.bloklar); }
+
+yukleBloklari(state.tarih);
+
+// ── Google API ────────────────────────────────────────────────────────────────
+function gapiBaslat(){
+  if(!state.ayarlar.clientId||!state.ayarlar.apiKey) return;
+  const s=document.createElement('script');
+  s.src='https://apis.google.com/js/api.js';
+  s.onload=()=>{
+    gapi.load('client:auth2',async()=>{
+      try{
+        await gapi.client.init({
+          apiKey: state.ayarlar.apiKey,
+          clientId: state.ayarlar.clientId,
+          scope: SCOPES,
+          discoveryDocs:[
+            'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
+            'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest',
+          ]
+        });
+        state.gapiHazir=true;
+        const auth=gapi.auth2.getAuthInstance();
+        state.giris=auth.isSignedIn.get();
+        auth.isSignedIn.listen(v=>{state.giris=v;render();});
+        render();
+      }catch(e){console.warn('gapi hata',e);}
+    });
+  };
+  document.body.appendChild(s);
+}
+
+async function googleGiris(){
+  if(!state.gapiHazir){bildirimGoster('Google API hazır değil','hata');return;}
+  try{ await gapi.auth2.getAuthInstance().signIn();bildirimGoster('Google hesabına bağlandı ✓'); }
+  catch(e){ bildirimGoster('Giriş iptal edildi','uyari'); }
+}
+async function googleCikis(){
+  await gapi.auth2.getAuthInstance().signOut();
+  bildirimGoster('Çıkış yapıldı');
+}
+
+// ── Bildirim ──────────────────────────────────────────────────────────────────
+let bildirimTimer=null;
+function bildirimGoster(mesaj,tip='ok'){
+  const el=document.createElement('div');
+  el.className='bildirim';
+  el.textContent=mesaj;
+  el.style.background=tip==='hata'?'#ef4444':tip==='uyari'?'#f59e0b':'#22c55e';
+  document.body.appendChild(el);
+  if(bildirimTimer)clearTimeout(bildirimTimer);
+  bildirimTimer=setTimeout(()=>el.remove(),3000);
+}
+
+// ── Blok işlemleri ────────────────────────────────────────────────────────────
+async function blokKaydet(blok){
+  yukleniyor(true);
+  let yeni={...blok};
+  if(state.giris){
+    try{
+      const etkinlik={
+        summary: katEmoji(blok.kategori)+' '+blok.baslik,
+        description: blok.not||'',
+        start:{dateTime:saatDate(state.tarih,blok.baslangic),timeZone:'Europe/Istanbul'},
+        end:{dateTime:saatDate(state.tarih,blok.bitis),timeZone:'Europe/Istanbul'},
+        colorId: katCid(blok.kategori),
+      };
+      if(blok.calendarEventId){
+        await gapi.client.calendar.events.update({calendarId:'primary',eventId:blok.calendarEventId,resource:etkinlik});
+      } else {
+        const res=await gapi.client.calendar.events.insert({calendarId:'primary',resource:etkinlik});
+        yeni.calendarEventId=res.result.id;
+      }
+      bildirimGoster('Google Calendar\'a eklendi ✓');
+    }catch(e){ bildirimGoster('Calendar hatası: '+(e.result?.error?.message??e.message),'hata'); }
+  }
+  const idx=state.bloklar.findIndex(b=>b.id===blok.id);
+  if(idx>=0) state.bloklar[idx]=yeni;
+  else state.bloklar.push(yeni);
+  state.bloklar.sort((a,b)=>a.baslangic.localeCompare(b.baslangic));
+  kaydEtBloklari();
+  state.modal=null;
+  yukleniyor(false);
+  render();
+}
+
+async function blokSil(blok){
+  if(blok.calendarEventId&&state.giris){
+    try{ await gapi.client.calendar.events.delete({calendarId:'primary',eventId:blok.calendarEventId}); }catch{}
+  }
+  state.bloklar=state.bloklar.filter(b=>b.id!==blok.id);
+  kaydEtBloklari();
+  bildirimGoster('Blok silindi');
+  render();
+}
+
+function tamamlandiToggle(id,durum){
+  state.bloklar=state.bloklar.map(b=>b.id===id?{...b,tamamlandi:durum}:b);
+  kaydEtBloklari();
+  render();
+}
+
+// ── Şablon ────────────────────────────────────────────────────────────────────
+function sablonKaydet(){
+  const isim=prompt('Şablon adı:');
+  if(!isim)return;
+  state.sablonlar.push({
+    id:uid(), isim,
+    tarih: new Date().toLocaleDateString('tr-TR'),
+    bloklar: state.bloklar.map(({tamamlandi,calendarEventId,...rest})=>({...rest,id:uid(),tamamlandi:null,calendarEventId:null}))
+  });
+  kaydet('sablonlar',state.sablonlar);
+  bildirimGoster('Şablon kaydedildi ✓');
+  render();
+}
+
+function sablonUygula(s){
+  state.bloklar=s.bloklar.map(b=>({...b,id:uid()})).sort((a,b)=>a.baslangic.localeCompare(b.baslangic));
+  kaydEtBloklari();
+  state.ekran='plan';
+  bildirimGoster('"'+s.isim+'" şablonu uygulandı ✓');
+  render();
+}
+
+function sablonSil(id){
+  state.sablonlar=state.sablonlar.filter(s=>s.id!==id);
+  kaydet('sablonlar',state.sablonlar);
+  render();
+}
+
+// ── Rapor gönder ──────────────────────────────────────────────────────────────
+async function raporGonder(){
+  if(!state.giris){bildirimGoster('Önce Google hesabına giriş yap','uyari');return;}
+  if(!state.ayarlar.email){bildirimGoster('Ayarlardan e-posta adresini gir','uyari');return;}
+  yukleniyor(true);
+  const {tam,kac}=raporHesapla();
+  const toplam=state.bloklar.length;
+  const basari=toplam>0?Math.round(tam/toplam*100):0;
+  const satirlar=state.bloklar.map(b=>`<tr>
+    <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${b.tamamlandi===true?'✅':b.tamamlandi===false?'❌':'⬜'}</td>
+    <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${b.baslangic} - ${b.bitis}</td>
+    <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${katEmoji(b.kategori)} ${b.baslik}</td>
+    <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#64748b">${sureFmt(b.baslangic,b.bitis)}</td>
+  </tr>`).join('');
+  const html=`<div style="font-family:sans-serif;max-width:600px;margin:auto;background:#f8fafc;padding:32px">
+  <h1 style="color:#0f172a;margin:0 0 4px">Günlük Plan Raporu</h1>
+  <p style="color:#64748b;margin:0 0 24px">${new Date(state.tarih).toLocaleDateString('tr-TR',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
+  <div style="display:flex;gap:16px;margin-bottom:28px">
+    <div style="background:white;border-radius:12px;padding:16px;flex:1;text-align:center"><div style="font-size:28px;font-weight:700;color:#22c55e">${tam}</div><div style="font-size:12px;color:#64748b">Tamamlandı</div></div>
+    <div style="background:white;border-radius:12px;padding:16px;flex:1;text-align:center"><div style="font-size:28px;font-weight:700;color:#ef4444">${kac}</div><div style="font-size:12px;color:#64748b">Kaçırıldı</div></div>
+    <div style="background:white;border-radius:12px;padding:16px;flex:1;text-align:center"><div style="font-size:28px;font-weight:700;color:#f59e0b">${basari}%</div><div style="font-size:12px;color:#64748b">Başarı</div></div>
+  </div>
+  <table style="width:100%;background:white;border-radius:12px;border-collapse:collapse"><thead><tr style="background:#0f172a;color:white"><th style="padding:10px 12px;text-align:left;font-size:13px">Durum</th><th style="padding:10px 12px;text-align:left;font-size:13px">Saat</th><th style="padding:10px 12px;text-align:left;font-size:13px">Aktivite</th><th style="padding:10px 12px;text-align:left;font-size:13px">Süre</th></tr></thead><tbody>${satirlar}</tbody></table>
+  <p style="color:#94a3b8;font-size:12px;margin-top:24px;text-align:center">Günüm Planlayıcı tarafından gönderildi</p></div>`;
+  const mesaj=['To: '+state.ayarlar.email,'Content-Type: text/html; charset=utf-8','MIME-Version: 1.0',
+    'Subject: =?utf-8?B?'+btoa(unescape(encodeURIComponent('Günlük Rapor — '+state.tarih)))+'?=','',html].join('\n');
+  const encoded=btoa(unescape(encodeURIComponent(mesaj))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  try{
+    await gapi.client.gmail.users.messages.send({userId:'me',resource:{raw:encoded}});
+    bildirimGoster('Rapor gönderildi ✓');
+  }catch(e){ bildirimGoster('Mail hatası: '+(e.result?.error?.message??e.message),'hata'); }
+  yukleniyor(false);
+}
+
+function raporHesapla(){
+  return {
+    tam: state.bloklar.filter(b=>b.tamamlandi===true).length,
+    kac: state.bloklar.filter(b=>b.tamamlandi===false).length,
+    bel: state.bloklar.filter(b=>b.tamamlandi===null).length,
+  };
+}
+
+function yukleniyor(v){ state.yukleniyor=v; render(); }
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render(){
+  const app=document.getElementById('app');
+  app.innerHTML='';
+
+  // Header
+  const header=el('div','header');
+  const logoDiv=el('div');
+  logoDiv.innerHTML='<span style="color:#e2e8f0">📋 </span><span class="logo">Günüm</span>';
+  header.appendChild(logoDiv);
+
+  const gBtn=el('button');
+  if(state.gapiHazir&&state.giris){
+    gBtn.className='g-btn connected';
+    gBtn.innerHTML='🔗 Bağlı';
+    gBtn.onclick=googleCikis;
+  } else if(state.gapiHazir){
+    gBtn.className='g-btn disconnected';
+    gBtn.innerHTML='G Bağlan';
+    gBtn.onclick=googleGiris;
+  } else if(state.ayarlar.clientId){
+    gBtn.className='g-btn';
+    gBtn.style.cssText='color:#94a3b8;border-color:#475569';
+    gBtn.innerHTML='⏳ Yükleniyor';
+  } else {
+    gBtn.className='g-btn';
+    gBtn.style.cssText='color:#94a3b8;border-color:#475569';
+    gBtn.innerHTML='⚙️ API Gir';
+    gBtn.onclick=()=>{state.ekran='ayarlar';render();};
+  }
+  header.appendChild(gBtn);
+  app.appendChild(header);
+
+  // Tarih bar
+  const dateBar=el('div','date-bar');
+  const prevBtn=el('button','date-nav'); prevBtn.textContent='‹';
+  prevBtn.onclick=()=>{ const d=new Date(state.tarih);d.setDate(d.getDate()-1);state.tarih=d.toISOString().split('T')[0];yukleBloklari(state.tarih);render(); };
+  const dateInp=document.createElement('input');
+  dateInp.type='date'; dateInp.value=state.tarih; dateInp.className='date-input';
+  dateInp.onchange=e=>{state.tarih=e.target.value;yukleBloklari(state.tarih);render();};
+  const nextBtn=el('button','date-nav'); nextBtn.textContent='›';
+  nextBtn.onclick=()=>{ const d=new Date(state.tarih);d.setDate(d.getDate()+1);state.tarih=d.toISOString().split('T')[0];yukleBloklari(state.tarih);render(); };
+  dateBar.append(prevBtn,dateInp,nextBtn);
+  app.appendChild(dateBar);
+
+  // Tabs
+  const tabs=el('div','tabs');
+  [['plan','📋','Plan'],['rapor','📊','Rapor'],['sablonlar','📁','Şablonlar'],['ayarlar','⚙️','Ayarlar']].forEach(([id,icon,lbl])=>{
+    const t=el('button','tab'+(state.ekran===id?' active':''));
+    t.innerHTML=`<span class="tab-icon">${icon}</span><span>${lbl}</span>`;
+    t.onclick=()=>{state.ekran=id;render();};
+    tabs.appendChild(t);
+  });
+  app.appendChild(tabs);
+
+  // Main
+  const main=el('div','main');
+  if(state.ekran==='plan') renderPlan(main);
+  else if(state.ekran==='rapor') renderRapor(main);
+  else if(state.ekran==='sablonlar') renderSablonlar(main);
+  else if(state.ekran==='ayarlar') renderAyarlar(main);
+  app.appendChild(main);
+
+  // Modal
+  if(state.modal) renderModal(app);
+
+  // Yükleniyor
+  if(state.yukleniyor){
+    const ov=el('div','loading-overlay');
+    const box=el('div','loading-box');
+    box.innerHTML='<div class="spinner"></div><span style="color:#e2e8f0;font-size:14px">İşleniyor...</span>';
+    ov.appendChild(box); app.appendChild(ov);
+  }
+}
+
+function renderPlan(main){
+  const toplamDk=state.bloklar.reduce((a,b)=>a+Math.max(0,dkFark(b.baslangic,b.bitis)),0);
+  const ust=el('div');
+  ust.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
+  const info=el('div');
+  info.style.cssText='color:#94a3b8;font-size:13px';
+  info.textContent=state.bloklar.length+' aktivite · '+Math.floor(toplamDk/60)+'s '+(toplamDk%60)+'dk';
+  ust.appendChild(info);
+  if(state.bloklar.length>0){
+    const sb=el('button','sablon-btn');
+    sb.textContent='💾 Şablon Kaydet';
+    sb.onclick=sablonKaydet;
+    ust.appendChild(sb);
+  }
+  main.appendChild(ust);
+
+  if(state.bloklar.length===0){
+    const bos=el('div','bos');
+    bos.innerHTML='<div class="bos-icon">🗓️</div><div class="bos-txt">Henüz plan yok.<br>Aşağıdan yeni blok ekle.</div>';
+    main.appendChild(bos);
+  } else {
+    state.bloklar.forEach(blok=>{
+      const durum=blok.tamamlandi===true?'tamamlandi':blok.tamamlandi===false?'kacirildi':'';
+      const kart=el('div','blok-kart '+durum);
+      kart.style.borderLeftColor=blok.tamamlandi===true?'#22c55e':blok.tamamlandi===false?'#ef4444':katRenk(blok.kategori);
+      const ic=el('div','blok-icerik');
+
+      // Check buttons
+      const cg=el('div','check-group');
+      const okBtn=el('button','check-btn ok'+(blok.tamamlandi===true?' active':''));
+      okBtn.textContent='✓'; okBtn.title='Tamamlandı';
+      okBtn.onclick=()=>tamamlandiToggle(blok.id,blok.tamamlandi===true?null:true);
+      const noBtn=el('button','check-btn no'+(blok.tamamlandi===false?' active':''));
+      noBtn.textContent='✗'; noBtn.title='Tamamlanamadı';
+      noBtn.onclick=()=>tamamlandiToggle(blok.id,blok.tamamlandi===false?null:false);
+      cg.append(okBtn,noBtn);
+
+      // Bilgi
+      const bilgi=el('div','blok-bilgi');
+      const baslik=el('div','blok-baslik'+(blok.tamamlandi===false?' kacirildi':''));
+      baslik.textContent=katEmoji(blok.kategori)+' '+blok.baslik;
+      const alt=el('div','blok-alt');
+      alt.innerHTML=blok.baslangic+' – '+blok.bitis+
+        ' <span style="color:'+katRenk(blok.kategori)+'">'+sureFmt(blok.baslangic,blok.bitis)+'</span>'+
+        (blok.calendarEventId?' 📅':'');
+      bilgi.append(baslik,alt);
+      if(blok.not){ const n=el('div','blok-not');n.textContent=blok.not;bilgi.appendChild(n); }
+
+      // Actions
+      const acts=el('div','blok-actions');
+      const edit=el('button','mini-btn'); edit.textContent='✏️';
+      edit.onclick=()=>{state.modal={tip:'blok',veri:{...blok}};render();};
+      const del=el('button','mini-btn'); del.textContent='🗑️'; del.style.color='#ef4444';
+      del.onclick=()=>blokSil(blok);
+      acts.append(edit,del);
+
+      ic.append(cg,bilgi,acts);
+      kart.appendChild(ic);
+      main.appendChild(kart);
+    });
+  }
+
+  const ekleBtn=el('button','ekle-btn');
+  ekleBtn.textContent='+ Yeni Blok Ekle';
+  ekleBtn.onclick=()=>{state.modal={tip:'blok',veri:{id:uid(),baslik:'',baslangic:'08:00',bitis:'09:00',kategori:'diger',not:'',tamamlandi:null,calendarEventId:null}};render();};
+  main.appendChild(ekleBtn);
+}
+
+function renderRapor(main){
+  const {tam,kac,bel}=raporHesapla();
+  const toplam=state.bloklar.length;
+  const basari=toplam>0?Math.round(tam/toplam*100):0;
+
+  const grid=el('div','ozet-grid');
+  [[tam,'Tamamlandı','#22c55e'],[kac,'Kaçırıldı','#ef4444'],[basari+'%','Başarı','#f59e0b']].forEach(([sayi,lbl,renk])=>{
+    const k=el('div','ozet-kart'); k.style.borderTopColor=renk;
+    k.innerHTML=`<div class="ozet-sayi" style="color:${renk}">${sayi}</div><div class="ozet-label">${lbl}</div>`;
+    grid.appendChild(k);
+  });
+  main.appendChild(grid);
+
+  if(toplam>0){
+    const pbw=el('div','progress-bar-wrap');
+    const pb=el('div','progress-bar');
+    pb.style.cssText='width:'+basari+'%;background:'+(basari>=80?'#22c55e':basari>=50?'#f59e0b':'#ef4444');
+    pbw.appendChild(pb); main.appendChild(pbw);
+    const pl=el('div','progress-label');
+    pl.textContent=bel>0?bel+' aktivite henüz işaretlenmedi':'Tüm aktiviteler işaretlendi ✓';
+    main.appendChild(pl);
+  }
+
+  if(toplam===0){
+    const bos=el('div','bos');
+    bos.innerHTML='<div class="bos-icon">📊</div><div class="bos-txt">Önce plan sekmesinden aktivite ekle.</div>';
+    main.appendChild(bos);
+    return;
+  }
+
+  // Kategori dağılımı
+  const toplamDk=state.bloklar.reduce((a,b)=>a+Math.max(0,dkFark(b.baslangic,b.bitis)),0);
+  const katOzet=KATEGORILER.map(k=>{
+    const liste=state.bloklar.filter(b=>b.kategori===k.id);
+    const dk=liste.reduce((a,b)=>a+Math.max(0,dkFark(b.baslangic,b.bitis)),0);
+    return{...k,adet:liste.length,dk};
+  }).filter(k=>k.adet>0);
+
+  if(katOzet.length>0){
+    const st=el('div','section-title'); st.textContent='KATEGORİ DAĞILIMI';
+    main.appendChild(st);
+    katOzet.forEach(k=>{
+      const row=el('div','kat-row');
+      const emo=el('span'); emo.style.cssText='font-size:16px;width:20px'; emo.textContent=k.emoji;
+      const bw=el('div','kat-bar-wrap');
+      const bt=el('div','kat-bar-top');
+      bt.innerHTML=`<span style="font-size:13px;color:#e2e8f0">${k.label}</span><span style="font-size:12px;color:#94a3b8">${k.adet} blok · ${Math.floor(k.dk/60)}s${k.dk%60}dk</span>`;
+      const b=el('div','kat-bar');
+      const bf=el('div','kat-bar-fill');
+      bf.style.cssText='width:'+(toplamDk>0?Math.round(k.dk/toplamDk*100):0)+'%;background:'+k.renk;
+      b.appendChild(bf); bw.append(bt,b); row.append(emo,bw); main.appendChild(row);
+    });
+  }
+
+  // Liste
+  const st2=el('div','section-title'); st2.style.marginTop='16px'; st2.textContent='TÜM AKTİVİTELER';
+  main.appendChild(st2);
+  state.bloklar.forEach(b=>{
+    const row=el('div','rapor-liste-row');
+    const ikon=el('span'); ikon.style.cssText='font-size:16px;width:20px;text-align:center';
+    ikon.textContent=b.tamamlandi===true?'✅':b.tamamlandi===false?'❌':'⬜';
+    const saat=el('span'); saat.style.cssText='font-size:13px;color:#94a3b8;min-width:95px';
+    saat.textContent=b.baslangic+' – '+b.bitis;
+    const isim=el('span'); isim.style.cssText='flex:1;font-size:14px;color:'+(b.tamamlandi===false?'#64748b':'#e2e8f0');
+    if(b.tamamlandi===false) isim.style.textDecoration='line-through';
+    isim.textContent=katEmoji(b.kategori)+' '+b.baslik;
+    const sure=el('span'); sure.style.cssText='font-size:12px;color:'+katRenk(b.kategori);
+    sure.textContent=sureFmt(b.baslangic,b.bitis);
+    row.append(ikon,saat,isim,sure); main.appendChild(row);
+  });
+
+  const gBtn=el('button','rapor-gonder');
+  gBtn.textContent=state.giris?'📧 Gmail ile Rapor Gönder':'Önce Google Hesabına Giriş Yap';
+  gBtn.disabled=!state.giris;
+  gBtn.onclick=raporGonder;
+  main.appendChild(gBtn);
+}
+
+function renderSablonlar(main){
+  if(state.sablonlar.length===0){
+    const bos=el('div','bos');
+    bos.innerHTML='<div class="bos-icon">📁</div><div class="bos-txt">Henüz şablon yok.<br>Plan sekmesinde "💾 Şablon Kaydet" butonu ile kaydet.</div>';
+    main.appendChild(bos);
+    return;
+  }
+  state.sablonlar.forEach(s=>{
+    const kart=el('div','sablon-kart');
+    const ust=el('div','sablon-kart-ust');
+    const sol=el('div');
+    const isim=el('div','sablon-isim'); isim.textContent=s.isim;
+    const meta=el('div','sablon-meta'); meta.textContent=s.tarih+' · '+s.bloklar.length+' aktivite';
+    const prev=el('div','sablon-preview');
+    prev.textContent=s.bloklar.slice(0,3).map(b=>katEmoji(b.kategori)+' '+b.baslik).join(' · ')+(s.bloklar.length>3?' +daha':'');
+    sol.append(isim,meta,prev);
+    const sag=el('div'); sag.style.cssText='display:flex;gap:6px;align-items:flex-start';
+    const uygula=el('button','sablon-uygula'); uygula.textContent='▶ Uygula';
+    uygula.onclick=()=>sablonUygula(s);
+    const sil=el('button','mini-btn'); sil.textContent='🗑️'; sil.style.color='#ef4444';
+    sil.onclick=()=>sablonSil(s.id);
+    sag.append(uygula,sil);
+    ust.append(sol,sag); kart.appendChild(ust); main.appendChild(kart);
+  });
+}
+
+function renderAyarlar(main){
+  const bilgi=el('div','ayar-bilgi');
+  bilgi.innerHTML='<strong style="color:#60a5fa">📌 Google API Kurulumu</strong><br><br>'+
+    '1. <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a>\'a git<br>'+
+    '2. Calendar API + Gmail API\'yi etkinleştir<br>'+
+    '3. OAuth 2.0 Client ID oluştur (Web app)<br>'+
+    '4. Authorized origins\'e bu sitenin URL\'ini ekle<br>'+
+    '5. API Key oluştur';
+  main.appendChild(bilgi);
+
+  [
+    ['clientId','Google Client ID','xxxx.apps.googleusercontent.com','text'],
+    ['apiKey','Google API Key','AIzaSy...','text'],
+    ['email','Rapor E-posta Adresi','sen@gmail.com','email'],
+  ].forEach(([key,label,ph,type])=>{
+    const g=el('div','ayar-grup');
+    const lbl=el('label','label'); lbl.textContent=label;
+    const inp=document.createElement('input');
+    inp.type=type; inp.value=state.ayarlar[key]; inp.placeholder=ph; inp.className='input';
+    inp.onchange=e=>{
+      state.ayarlar[key]=e.target.value;
+      kaydet('ayarlar',state.ayarlar);
+      if(key==='clientId'||key==='apiKey') gapiBaslat();
+    };
+    g.append(lbl,inp); main.appendChild(g);
+  });
+
+  const not=el('div','ayar-not');
+  not.textContent='⚠️ Bilgiler cihazında yerel olarak saklanır. Sayfayı yeniledikten sonra "G Bağlan" butonuna basarak giriş yap.';
+  main.appendChild(not);
+}
+
+function renderModal(app){
+  const blok=state.modal.veri;
+  const ov=el('div','overlay');
+  ov.onclick=e=>{if(e.target===ov){state.modal=null;render();}};
+  const modal=el('div','modal');
+
+  const header=el('div','modal-header');
+  const title=el('div','modal-title'); title.textContent=blok.baslik?'Bloğu Düzenle':'Yeni Blok';
+  const kapat=el('button','modal-kapat'); kapat.textContent='✕';
+  kapat.onclick=()=>{state.modal=null;render();};
+  header.append(title,kapat); modal.appendChild(header);
+
+  // Başlık
+  const rBaslik=el('div','form-row');
+  const lBaslik=el('label','label'); lBaslik.textContent='Başlık';
+  const iBaslik=document.createElement('input');
+  iBaslik.type='text'; iBaslik.value=blok.baslik; iBaslik.placeholder='Sabah yürüyüşü...'; iBaslik.className='input';
+  iBaslik.oninput=e=>{ state.modal.veri.baslik=e.target.value; };
+  rBaslik.append(lBaslik,iBaslik); modal.appendChild(rBaslik);
+
+  // Saat
+  const tg=el('div','time-grid');
+  ['baslangic','bitis'].forEach((k,i)=>{
+    const g=el('div');
+    const l=el('label','label'); l.textContent=i===0?'Başlangıç':'Bitiş';
+    const inp=document.createElement('input');
+    inp.type='time'; inp.value=blok[k]; inp.className='input';
+    inp.onchange=e=>{ state.modal.veri[k]=e.target.value; renderModalSure(); };
+    g.append(l,inp); tg.appendChild(g);
+  });
+  modal.appendChild(tg);
+
+  // Süre preview
+  const sureEl=el('div','sure-preview');
+  sureEl.id='sure-preview';
+  const dk=dkFark(blok.baslangic,blok.bitis);
+  if(dk>0) sureEl.innerHTML='Süre: <strong style="color:'+katRenk(blok.kategori)+'">'+sureFmt(blok.baslangic,blok.bitis)+'</strong>';
+  modal.appendChild(sureEl);
+
+  // Kategori
+  const rKat=el('div','form-row');
+  const lKat=el('label','label'); lKat.textContent='Kategori';
+  const ks=el('div','kat-secim');
+  KATEGORILER.forEach(k=>{
+    const chip=el('button','kat-chip');
+    chip.textContent=k.emoji+' '+k.label;
+    if(blok.kategori===k.id){ chip.style.borderColor=k.renk; chip.style.color=k.renk; chip.style.background=k.renk+'22'; }
+    chip.onclick=()=>{state.modal.veri.kategori=k.id;render();};
+    ks.appendChild(chip);
+  });
+  rKat.append(lKat,ks); modal.appendChild(rKat);
+
+  // Not
+  const rNot=el('div','form-row');
+  const lNot=el('label','label'); lNot.textContent='Not (isteğe bağlı)';
+  const taNot=document.createElement('textarea');
+  taNot.value=blok.not; taNot.placeholder='Eklemek istediğin notlar...'; taNot.className='input'; taNot.rows=2;
+  taNot.oninput=e=>{ state.modal.veri.not=e.target.value; };
+  rNot.append(lNot,taNot); modal.appendChild(rNot);
+
+  // Footer
+  const footer=el('div','modal-footer');
+  const iptal=el('button','iptal-btn'); iptal.textContent='İptal';
+  iptal.onclick=()=>{state.modal=null;render();};
+  const kaydetBtn=el('button','kaydet-btn');
+  kaydetBtn.textContent=state.yukleniyor?'Ekleniyor...':'Kaydet & Calendar\'a Ekle';
+  kaydetBtn.disabled=!blok.baslik||state.yukleniyor;
+  kaydetBtn.onclick=()=>{ if(blok.baslik) blokKaydet(state.modal.veri); };
+  footer.append(iptal,kaydetBtn); modal.appendChild(footer);
+
+  ov.appendChild(modal); app.appendChild(ov);
+}
+
+function renderModalSure(){
+  const el2=document.getElementById('sure-preview');
+  if(!el2)return;
+  const v=state.modal?.veri;
+  if(!v)return;
+  const dk=dkFark(v.baslangic,v.bitis);
+  el2.innerHTML=dk>0?'Süre: <strong style="color:'+katRenk(v.kategori)+'">'+sureFmt(v.baslangic,v.bitis)+'</strong>':'';
+}
+
+function el(tag,cls=''){
+  const e=document.createElement(tag);
+  if(cls) e.className=cls;
+  return e;
+}
+
+// ── Başlat ────────────────────────────────────────────────────────────────────
+render();
+if(state.ayarlar.clientId && state.ayarlar.apiKey) gapiBaslat();
+</script>
+</body>
+</html>
