@@ -181,6 +181,8 @@ yukleBloklari(state.tarih);
 // ── Google API ────────────────────────────────────────────────────────────────
 function gapiBaslat(){
   if(!state.ayarlar.clientId||!state.ayarlar.apiKey) return;
+  if(window._gapiLoading) return;
+  window._gapiLoading=true;
   const s=document.createElement('script');
   s.src='https://apis.google.com/js/api.js';
   s.onload=()=>{
@@ -190,19 +192,29 @@ function gapiBaslat(){
           apiKey: state.ayarlar.apiKey,
           clientId: state.ayarlar.clientId,
           scope: SCOPES,
-          discoveryDocs:[
-            'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
-            'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest',
-          ]
         });
+        // Calendar ve Gmail API'lerini manuel yükle
+        await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest');
+        await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest');
         state.gapiHazir=true;
         const auth=gapi.auth2.getAuthInstance();
         state.giris=auth.isSignedIn.get();
         auth.isSignedIn.listen(v=>{state.giris=v;render();});
         render();
-      }catch(e){console.warn('gapi hata',e);}
+      }catch(e){
+        console.warn('gapi hata',e);
+        // Discovery docs yüklenemese bile devam et
+        try{
+          state.gapiHazir=true;
+          const auth=gapi.auth2.getAuthInstance();
+          state.giris=auth.isSignedIn.get();
+          auth.isSignedIn.listen(v=>{state.giris=v;render();});
+          render();
+        }catch(e2){console.warn('gapi fallback hata',e2);}
+      }
     });
   };
+  s.onerror=()=>{ window._gapiLoading=false; };
   document.body.appendChild(s);
 }
 
