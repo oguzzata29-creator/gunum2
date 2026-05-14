@@ -31,8 +31,9 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1)}
 input[type="time"]::-webkit-calendar-picker-indicator{filter:invert(1)}
 
 /* Tabs */
-.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:57px;z-index:19}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;background:none;border:none;border-bottom:2px solid transparent;color:var(--txt3);cursor:pointer;font-size:11px;transition:color .2s}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:57px;z-index:19;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 14px;background:none;border:none;border-bottom:2px solid transparent;color:var(--txt3);cursor:pointer;font-size:11px;transition:color .2s;white-space:nowrap}
 .tab.active{color:var(--blue);border-bottom-color:var(--blue)}
 .tab-icon{font-size:15px}
 
@@ -155,7 +156,9 @@ let state = {
   tarih: bugunTarihi(),
   bloklar: [],
   sablonlar: yukle('sablonlar', []),
-  ayarlar: yukle('ayarlar', {clientId:'', apiKey:'', email:''}),
+  notlar: yukle('kitap_notlar', []),
+  urunler: yukle('urun_listesi', []),
+  ayarlar: yukle('ayarlar', {clientId:'', apiKey:'', email:'', anthropicKey:''}),
   modal: null,
   gapiHazir: false,
   giris: false,
@@ -456,7 +459,7 @@ function render(){
 
   // Tabs
   const tabs=el('div','tabs');
-  [['plan','📋','Plan'],['rapor','📊','Rapor'],['sablonlar','📁','Şablonlar'],['ayarlar','⚙️','Ayarlar']].forEach(([id,icon,lbl])=>{
+  [['plan','📋','Plan'],['notlar','📸','Notlar'],['urunler','🛍️','Ürünler'],['rapor','📊','Rapor'],['ayarlar','⚙️','Ayarlar']].forEach(([id,icon,lbl])=>{
     const t=el('button','tab'+(state.ekran===id?' active':''));
     t.innerHTML=`<span class="tab-icon">${icon}</span><span>${lbl}</span>`;
     t.onclick=()=>{state.ekran=id;render();};
@@ -469,11 +472,14 @@ function render(){
   if(state.ekran==='plan') renderPlan(main);
   else if(state.ekran==='rapor') renderRapor(main);
   else if(state.ekran==='sablonlar') renderSablonlar(main);
+  else if(state.ekran==='notlar') renderNotlar(main);
+  else if(state.ekran==='urunler') renderUrunler(main);
   else if(state.ekran==='ayarlar') renderAyarlar(main);
   app.appendChild(main);
 
   // Modal
-  if(state.modal) renderModal(app);
+  if(state.modal?.tip==='blok') renderModal(app);
+  else if(state.modal?.tip==='urun') renderUrunModal(app);
 
   // Yükleniyor
   if(state.yukleniyor){
@@ -624,10 +630,20 @@ function renderRapor(main){
   });
 
   const gBtn=el('button','rapor-gonder');
-  gBtn.textContent=state.giris?'📧 Gmail ile Rapor Gönder':'Önce Google Hesabına Giriş Yap';
+  gBtn.textContent=state.giris?'📧 Günlük Raporu Gmail\'e Gönder':'Önce Google Hesabına Giriş Yap';
   gBtn.disabled=!state.giris;
   gBtn.onclick=raporGonder;
   main.appendChild(gBtn);
+
+  // Haftalık rapor butonları
+  const haftaBaslik=el('div','section-title'); haftaBaslik.style.marginTop='20px'; haftaBaslik.textContent='HAFTALIK / AYLIK RAPOR';
+  main.appendChild(haftaBaslik);
+  const btnGrid=el('div'); btnGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px';
+  const indir=el('button','iptal-btn'); indir.textContent='⬇️ HTML İndir'; indir.onclick=haftalikRaporIndir;
+  const gndr=el('button','kaydet-btn');
+  gndr.textContent=state.giris?'📧 Haftalık Mail':'Giriş Yap';
+  gndr.disabled=!state.giris; gndr.onclick=haftalikRaporGonder;
+  btnGrid.append(indir,gndr); main.appendChild(btnGrid);
 }
 
 function renderSablonlar(main){
@@ -670,6 +686,7 @@ function renderAyarlar(main){
     ['clientId','Google Client ID','xxxx.apps.googleusercontent.com','text'],
     ['apiKey','Google API Key','AIzaSy...','text'],
     ['email','Rapor E-posta Adresi','sen@gmail.com','email'],
+    ['anthropicKey','Anthropic API Key (Kitap Notu için)','sk-ant-...','text'],
   ].forEach(([key,label,ph,type])=>{
     const g=el('div','ayar-grup');
     const lbl=el('label','label'); lbl.textContent=label;
@@ -769,6 +786,341 @@ function renderModalSure(){
   const dk=dkFark(v.baslangic,v.bitis);
   el2.innerHTML=dk>0?'Süre: <strong style="color:'+katRenk(v.kategori)+'">'+sureFmt(v.baslangic,v.bitis)+'</strong>':'';
 }
+
+// ── Kitap Notları Ekranı ──────────────────────────────────────────────────────
+async function gorseldenNotOlustur(dosya){
+  if(!state.ayarlar.anthropicKey){ bildirimGoster('Ayarlardan Anthropic API Key gir','hata'); return null; }
+  return new Promise((resolve)=>{
+    const reader = new FileReader();
+    reader.onload = async(e)=>{
+      const base64 = e.target.result.split(',')[1];
+      const mediaType = dosya.type || 'image/jpeg';
+      yukleniyor(true);
+      try{
+        const res = await fetch('https://api.anthropic.com/v1/messages',{
+          method:'POST',
+          headers:{
+            'Content-Type':'application/json',
+            'x-api-key': state.ayarlar.anthropicKey,
+            'anthropic-version':'2023-06-01',
+          },
+          body: JSON.stringify({
+            model:'claude-opus-4-5',
+            max_tokens:1024,
+            messages:[{
+              role:'user',
+              content:[
+                {type:'image', source:{type:'base64', media_type:mediaType, data:base64}},
+                {type:'text', text:'Bu görseldeki metni veya içeriği Türkçe olarak özetle. Önemli noktaları madde madde yaz. Başlık, ana fikirler ve önemli alıntılar şeklinde organize et.'}
+              ]
+            }]
+          })
+        });
+        const data = await res.json();
+        const ozet = data.content?.[0]?.text || 'Özet oluşturulamadı';
+        yukleniyor(false);
+        resolve(ozet);
+      }catch(e){
+        yukleniyor(false);
+        bildirimGoster('AI hatası: '+e.message,'hata');
+        resolve(null);
+      }
+    };
+    reader.readAsDataURL(dosya);
+  });
+}
+
+function wordIndir(notlar){
+  // Basit RTF formatı - Word ile açılır
+  let icerik = '{\\rtf1\\ansi\\deff0\n';
+  icerik += '{\\fonttbl{\\f0 Times New Roman;}}\n';
+  icerik += '{\\colortbl;\\red0\\green0\\blue0;\\red59\\green130\\blue246;}\n';
+  icerik += '\\f0\\fs24\n';
+  icerik += '{\\b\\fs32\\cf2 Kitap Notlar\\u305?m}\\par\\par\n';
+  notlar.forEach(n=>{
+    icerik += `{\\b\\fs26 ${escRtf(n.baslik)}}\\par\n`;
+    icerik += `{\\i\\cf2 ${escRtf(n.tarih)} | ${escRtf(n.kitap||'')} }\\par\\par\n`;
+    icerik += `${escRtf(n.ozet)}\\par\\par\n`;
+    icerik += '{\\pard\\brdrb\\brdrs\\brdrw10\\brsp20 \\par}\\par\n';
+  });
+  icerik += '}';
+  const blob = new Blob([icerik],{type:'application/rtf'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'kitap-notlarim.rtf';
+  a.click();
+  bildirimGoster('Word dosyası indirildi ✓');
+}
+
+function escRtf(s){
+  if(!s)return'';
+  return s.replace(/\\/g,'\\\\').replace(/[{}]/g,'\\$&')
+    .replace(/[^\x00-\x7F]/g, c=>'\\u'+c.charCodeAt(0)+'?');
+}
+
+function renderNotlar(main){
+  // Başlık + ekle butonu
+  const ust=el('div'); ust.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
+  const baslik=el('div'); baslik.style.cssText='color:#94a3b8;font-size:13px';
+  baslik.textContent=state.notlar.length+' not';
+  const btnGrp=el('div'); btnGrp.style.cssText='display:flex;gap:8px';
+
+  if(state.notlar.length>0){
+    const wordBtn=el('button','sablon-btn');
+    wordBtn.textContent='📄 Word İndir';
+    wordBtn.onclick=()=>wordIndir(state.notlar);
+    btnGrp.appendChild(wordBtn);
+  }
+  ust.append(baslik,btnGrp);
+  main.appendChild(ust);
+
+  // Görsel yükleme alanı
+  const yukleAlan=el('div');
+  yukleAlan.style.cssText='border:2px dashed #334155;border-radius:12px;padding:20px;text-align:center;cursor:pointer;margin-bottom:16px;background:#1e293b';
+  yukleAlan.innerHTML='<div style="font-size:32px">📸</div><div style="color:#94a3b8;font-size:13px;margin-top:8px">Kitap sayfası görselini buraya tıkla veya sürükle</div><div style="color:#64748b;font-size:11px;margin-top:4px">AI otomatik özetleyecek</div>';
+
+  const fileInput=document.createElement('input');
+  fileInput.type='file'; fileInput.accept='image/*'; fileInput.style.display='none';
+  fileInput.onchange=async(e)=>{
+    const dosya=e.target.files[0]; if(!dosya)return;
+    // Kitap adı sor
+    const kitap=prompt('Kitap adı (isteğe bağlı):') || '';
+    const ozet=await gorseldenNotOlustur(dosya);
+    if(ozet){
+      const not={
+        id:uid(), tarih:new Date().toLocaleDateString('tr-TR'),
+        kitap, ozet,
+        baslik: kitap || ('Not '+new Date().toLocaleTimeString('tr-TR')),
+        gorsel: await dosyaBase64(dosya),
+      };
+      state.notlar.unshift(not);
+      kaydet('kitap_notlar',state.notlar);
+      render();
+      bildirimGoster('Not kaydedildi ✓');
+    }
+    fileInput.value='';
+  };
+  yukleAlan.appendChild(fileInput);
+  yukleAlan.onclick=()=>fileInput.click();
+  yukleAlan.ondragover=e=>{e.preventDefault();yukleAlan.style.borderColor='#3b82f6';};
+  yukleAlan.ondragleave=()=>{yukleAlan.style.borderColor='#334155';};
+  yukleAlan.ondrop=async(e)=>{
+    e.preventDefault(); yukleAlan.style.borderColor='#334155';
+    const dosya=e.dataTransfer.files[0]; if(!dosya)return;
+    const kitap=prompt('Kitap adı:') || '';
+    const ozet=await gorseldenNotOlustur(dosya);
+    if(ozet){
+      const not={id:uid(),tarih:new Date().toLocaleDateString('tr-TR'),kitap,ozet,baslik:kitap||'Not',gorsel:await dosyaBase64(dosya)};
+      state.notlar.unshift(not);
+      kaydet('kitap_notlar',state.notlar);
+      render();
+    }
+  };
+  main.appendChild(yukleAlan);
+
+  if(state.notlar.length===0){
+    const bos=el('div','bos');
+    bos.innerHTML='<div class="bos-icon">📚</div><div class="bos-txt">Henüz not yok.<br>Bir kitap sayfasının fotoğrafını yükle.</div>';
+    main.appendChild(bos); return;
+  }
+
+  state.notlar.forEach(n=>{
+    const kart=el('div'); kart.style.cssText='background:#1e293b;border-radius:12px;padding:14px;margin-bottom:12px;border-left:3px solid #f59e0b';
+    const ust2=el('div'); ust2.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px';
+    const sol=el('div');
+    const baslikEl=el('div'); baslikEl.style.cssText='font-weight:600;font-size:15px;color:#e2e8f0'; baslikEl.textContent=n.baslik;
+    const meta=el('div'); meta.style.cssText='font-size:12px;color:#64748b;margin-top:2px'; meta.textContent=n.tarih+(n.kitap?' · 📚 '+n.kitap:'');
+    sol.append(baslikEl,meta);
+    const silBtn=el('button','mini-btn'); silBtn.textContent='🗑️'; silBtn.style.color='#ef4444';
+    silBtn.onclick=()=>{ state.notlar=state.notlar.filter(x=>x.id!==n.id); kaydet('kitap_notlar',state.notlar); render(); };
+    ust2.append(sol,silBtn); kart.appendChild(ust2);
+
+    if(n.gorsel){
+      const img=document.createElement('img');
+      img.src=n.gorsel; img.style.cssText='width:100%;border-radius:8px;margin-bottom:10px;max-height:150px;object-fit:cover';
+      kart.appendChild(img);
+    }
+    const ozetEl=el('div'); ozetEl.style.cssText='font-size:13px;color:#cbd5e1;line-height:1.7;white-space:pre-wrap'; ozetEl.textContent=n.ozet;
+    kart.appendChild(ozetEl);
+    main.appendChild(kart);
+  });
+}
+
+async function dosyaBase64(dosya){
+  return new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(dosya);});
+}
+
+// ── Ürün Keşif Ekranı ─────────────────────────────────────────────────────────
+function renderUrunler(main){
+  const ust=el('div'); ust.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
+  const bilgi=el('div'); bilgi.style.cssText='color:#94a3b8;font-size:13px'; bilgi.textContent=state.urunler.length+' ürün kaydedildi';
+  const ekleBtn2=el('button','sablon-btn'); ekleBtn2.textContent='+ Ürün Ekle';
+  ekleBtn2.onclick=()=>{ state.modal={tip:'urun',veri:{id:uid(),ad:'',videoLink:'',sosyalLink:'',not:'',tarih:new Date().toLocaleDateString('tr-TR')}}; render(); };
+  ust.append(bilgi,ekleBtn2); main.appendChild(ust);
+
+  if(state.urunler.length===0){
+    const bos=el('div','bos');
+    bos.innerHTML='<div class="bos-icon">🛍️</div><div class="bos-txt">Henüz ürün yok.<br>Araştırırken karşılaştığın ürünleri kaydet.</div>';
+    main.appendChild(bos); return;
+  }
+
+  state.urunler.forEach(u=>{
+    const kart=el('div'); kart.style.cssText='background:#1e293b;border-radius:12px;padding:14px;margin-bottom:10px;border-left:3px solid #a78bfa';
+    const ust2=el('div'); ust2.style.cssText='display:flex;justify-content:space-between;align-items:flex-start';
+    const sol=el('div'); sol.style.flex='1';
+    const ad=el('div'); ad.style.cssText='font-weight:600;font-size:15px;color:#e2e8f0;margin-bottom:4px'; ad.textContent='🛍️ '+u.ad;
+    const tarih=el('div'); tarih.style.cssText='font-size:11px;color:#64748b'; tarih.textContent=u.tarih;
+    sol.append(ad,tarih);
+
+    const sagGrp=el('div'); sagGrp.style.cssText='display:flex;gap:4px';
+    const duzenle=el('button','mini-btn'); duzenle.textContent='✏️';
+    duzenle.onclick=()=>{ state.modal={tip:'urun',veri:{...u}}; render(); };
+    const sil=el('button','mini-btn'); sil.textContent='🗑️'; sil.style.color='#ef4444';
+    sil.onclick=()=>{ state.urunler=state.urunler.filter(x=>x.id!==u.id); kaydet('urun_listesi',state.urunler); render(); };
+    sagGrp.append(duzenle,sil);
+    ust2.append(sol,sagGrp); kart.appendChild(ust2);
+
+    const linkler=el('div'); linkler.style.cssText='display:flex;gap:8px;margin-top:10px;flex-wrap:wrap';
+    if(u.videoLink){
+      const vl=document.createElement('a'); vl.href=u.videoLink; vl.target='_blank';
+      vl.style.cssText='font-size:12px;color:#60a5fa;text-decoration:none;background:#1e3a5f;padding:4px 10px;border-radius:20px';
+      vl.textContent='▶ Video'; linkler.appendChild(vl);
+    }
+    if(u.sosyalLink){
+      const sl=document.createElement('a'); sl.href=u.sosyalLink; sl.target='_blank';
+      sl.style.cssText='font-size:12px;color:#a78bfa;text-decoration:none;background:#2d1b69;padding:4px 10px;border-radius:20px';
+      sl.textContent='📱 Sosyal Medya'; linkler.appendChild(sl);
+    }
+    if(linkler.children.length>0) kart.appendChild(linkler);
+    if(u.not){
+      const notEl=el('div'); notEl.style.cssText='font-size:12px;color:#94a3b8;margin-top:8px;padding-top:8px;border-top:1px solid #334155';
+      notEl.textContent='📝 '+u.not; kart.appendChild(notEl);
+    }
+    main.appendChild(kart);
+  });
+}
+
+function renderUrunModal(app){
+  const u=state.modal.veri;
+  const ov=el('div','overlay');
+  ov.onclick=e=>{if(e.target===ov){state.modal=null;render();}};
+  const modal=el('div','modal');
+
+  const mh=el('div','modal-header');
+  const mt=el('div','modal-title'); mt.textContent=u.ad?'Ürünü Düzenle':'Yeni Ürün Keşfi';
+  const mk=el('button','modal-kapat'); mk.textContent='✕'; mk.onclick=()=>{state.modal=null;render();};
+  mh.append(mt,mk); modal.appendChild(mh);
+
+  [
+    ['ad','Ürün Adı','AirPods Pro, Kedi Yatağı...','text'],
+    ['videoLink','Video Linki (TikTok/YouTube)','https://...','url'],
+    ['sosyalLink','Sosyal Medya Linki','https://...','url'],
+    ['not','Not','Neden ilginç buldun?','text'],
+  ].forEach(([key,lbl,ph,type])=>{
+    const g=el('div','form-row');
+    const l=el('label','label'); l.textContent=lbl;
+    const inp=document.createElement('input');
+    inp.type=type; inp.value=u[key]||''; inp.placeholder=ph; inp.className='input';
+    inp.oninput=e=>{ state.modal.veri[key]=e.target.value; };
+    g.append(l,inp); modal.appendChild(g);
+  });
+
+  const footer=el('div','modal-footer');
+  const iptal=el('button','iptal-btn'); iptal.textContent='İptal'; iptal.onclick=()=>{state.modal=null;render();};
+  const kaydetBtn=el('button','kaydet-btn'); kaydetBtn.textContent='Kaydet';
+  kaydetBtn.onclick=()=>{
+    if(!state.modal.veri.ad){ bildirimGoster('Ürün adı gerekli','uyari'); return; }
+    const idx=state.urunler.findIndex(x=>x.id===state.modal.veri.id);
+    if(idx>=0) state.urunler[idx]=state.modal.veri;
+    else state.urunler.unshift(state.modal.veri);
+    kaydet('urun_listesi',state.urunler);
+    state.modal=null; render();
+    bildirimGoster('Ürün kaydedildi ✓');
+  };
+  footer.append(iptal,kaydetBtn); modal.appendChild(footer);
+  ov.appendChild(modal); app.appendChild(ov);
+}
+
+// ── Haftalık/Aylık Rapor ──────────────────────────────────────────────────────
+function haftalikRaporOlustur(){
+  const bugun=new Date();
+  const haftaBasi=new Date(bugun); haftaBasi.setDate(bugun.getDate()-6);
+  let html=`<div style="font-family:sans-serif;max-width:700px;margin:auto;padding:32px;background:#f8fafc">
+  <h1 style="color:#0f172a">📊 Haftalık Özet Raporu</h1>
+  <p style="color:#64748b">${haftaBasi.toLocaleDateString('tr-TR')} – ${bugun.toLocaleDateString('tr-TR')}</p><hr>`;
+
+  let toplamBlok=0, toplamTam=0;
+  for(let i=6;i>=0;i--){
+    const d=new Date(bugun); d.setDate(bugun.getDate()-i);
+    const key='plan_'+d.toISOString().split('T')[0];
+    const bloklar=yukle(key,[]);
+    if(bloklar.length===0)continue;
+    const tam=bloklar.filter(b=>b.tamamlandi===true).length;
+    toplamBlok+=bloklar.length; toplamTam+=tam;
+    const basari=Math.round(tam/bloklar.length*100);
+    html+=`<h3 style="color:#1e293b;margin-top:20px">${d.toLocaleDateString('tr-TR',{weekday:'long',day:'numeric',month:'long'})}</h3>`;
+    html+=`<p style="color:#64748b">Başarı: <strong style="color:${basari>=80?'#22c55e':basari>=50?'#f59e0b':'#ef4444'}">${basari}%</strong> (${tam}/${bloklar.length})</p>`;
+    html+=`<ul style="margin:8px 0;padding-left:20px">`;
+    bloklar.forEach(b=>{
+      const ikon=b.tamamlandi===true?'✅':b.tamamlandi===false?'❌':'⬜';
+      html+=`<li style="color:#475569;margin:4px 0">${ikon} ${b.baslangic}–${b.bitis} ${b.baslik}</li>`;
+    });
+    html+='</ul>';
+  }
+  const genelBasari=toplamBlok>0?Math.round(toplamTam/toplamBlok*100):0;
+  html+=`<hr><h2 style="color:#0f172a">Genel: ${genelBasari}% başarı (${toplamTam}/${toplamBlok} aktivite)</h2>`;
+
+  if(state.notlar.length>0){
+    html+=`<h2 style="color:#0f172a;margin-top:24px">📚 Bu Haftaki Notlar</h2>`;
+    state.notlar.slice(0,5).forEach(n=>{
+      html+=`<div style="background:white;border-radius:8px;padding:12px;margin:8px 0;border-left:3px solid #f59e0b">
+      <strong>${n.baslik}</strong><br><em style="color:#94a3b8">${n.tarih}</em><br>
+      <p style="color:#475569;margin-top:8px">${(n.ozet||'').slice(0,300)}...</p></div>`;
+    });
+  }
+
+  if(state.urunler.length>0){
+    html+=`<h2 style="color:#0f172a;margin-top:24px">🛍️ Keşfedilen Ürünler</h2><ul style="padding-left:20px">`;
+    state.urunler.slice(0,10).forEach(u=>{
+      html+=`<li style="margin:6px 0;color:#475569">${u.ad}${u.not?' — '+u.not:''}</li>`;
+    });
+    html+='</ul>';
+  }
+  html+='</div>';
+  return html;
+}
+
+async function haftalikRaporGonder(){
+  if(!state.giris||!state.accessToken){bildirimGoster('Önce Google hesabına giriş yap','uyari');return;}
+  if(!state.ayarlar.email){bildirimGoster('Ayarlardan e-posta adresini gir','uyari');return;}
+  yukleniyor(true);
+  const html=haftalikRaporOlustur();
+  const konu='Haftalık Rapor — '+new Date().toLocaleDateString('tr-TR');
+  const mesaj=['To: '+state.ayarlar.email,'Content-Type: text/html; charset=utf-8','MIME-Version: 1.0',
+    'Subject: =?utf-8?B?'+btoa(unescape(encodeURIComponent(konu)))+'?=','',html].join('\n');
+  const encoded=btoa(unescape(encodeURIComponent(mesaj))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  try{
+    const res=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+state.accessToken,'Content-Type':'application/json'},
+      body:JSON.stringify({raw:encoded}),
+    });
+    if(!res.ok)throw new Error((await res.json()).error?.message);
+    bildirimGoster('Haftalık rapor gönderildi ✓');
+  }catch(e){bildirimGoster('Mail hatası: '+e.message,'hata');}
+  yukleniyor(false);
+}
+
+function haftalikRaporIndir(){
+  const html=haftalikRaporOlustur();
+  const blob=new Blob([html],{type:'text/html'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='haftalik-rapor-'+new Date().toISOString().split('T')[0]+'.html';
+  a.click();
+  bildirimGoster('Rapor indirildi ✓');
+}
+
 
 function el(tag,cls=''){
   const e=document.createElement(tag);
