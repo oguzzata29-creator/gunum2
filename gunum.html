@@ -158,7 +158,7 @@ let state = {
   sablonlar: yukle('sablonlar', []),
   notlar: yukle('kitap_notlar', []),
   urunler: yukle('urun_listesi', []),
-  ayarlar: yukle('ayarlar', {clientId:'', apiKey:'', email:'', anthropicKey:''}),
+  ayarlar: yukle('ayarlar', {clientId:'', apiKey:'', email:'', geminiKey:''}),
   modal: null,
   gapiHazir: false,
   giris: false,
@@ -686,7 +686,7 @@ function renderAyarlar(main){
     ['clientId','Google Client ID','xxxx.apps.googleusercontent.com','text'],
     ['apiKey','Google API Key','AIzaSy...','text'],
     ['email','Rapor E-posta Adresi','sen@gmail.com','email'],
-    ['anthropicKey','Anthropic API Key (Kitap Notu için)','sk-ant-...','text'],
+    ['geminiKey','Gemini API Key (Kitap Notu için)','AIzaSy...','text'],
   ].forEach(([key,label,ph,type])=>{
     const g=el('div','ayar-grup');
     const lbl=el('label','label'); lbl.textContent=label;
@@ -789,7 +789,7 @@ function renderModalSure(){
 
 // ── Kitap Notları Ekranı ──────────────────────────────────────────────────────
 async function gorseldenNotOlustur(dosya){
-  if(!state.ayarlar.anthropicKey){ bildirimGoster('Ayarlardan Anthropic API Key gir','hata'); return null; }
+  if(!state.ayarlar.geminiKey){ bildirimGoster('Ayarlardan Gemini API Key gir','hata'); return null; }
   return new Promise((resolve)=>{
     const reader = new FileReader();
     reader.onload = async(e)=>{
@@ -797,27 +797,20 @@ async function gorseldenNotOlustur(dosya){
       const mediaType = dosya.type || 'image/jpeg';
       yukleniyor(true);
       try{
-        const res = await fetch('https://api.anthropic.com/v1/messages',{
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.ayarlar.geminiKey}`,{
           method:'POST',
-          headers:{
-            'Content-Type':'application/json',
-            'x-api-key': state.ayarlar.anthropicKey,
-            'anthropic-version':'2023-06-01',
-          },
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
-            model:'claude-opus-4-5',
-            max_tokens:1024,
-            messages:[{
-              role:'user',
-              content:[
-                {type:'image', source:{type:'base64', media_type:mediaType, data:base64}},
-                {type:'text', text:'Bu görseldeki metni veya içeriği Türkçe olarak özetle. Önemli noktaları madde madde yaz. Başlık, ana fikirler ve önemli alıntılar şeklinde organize et.'}
+            contents:[{
+              parts:[
+                {inline_data:{mime_type:mediaType, data:base64}},
+                {text:'Bu görseldeki metni veya içeriği Türkçe olarak özetle. Önemli noktaları madde madde yaz. Başlık, ana fikirler ve önemli alıntılar şeklinde organize et.'}
               ]
             }]
           })
         });
         const data = await res.json();
-        const ozet = data.content?.[0]?.text || 'Özet oluşturulamadı';
+        const ozet = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Özet oluşturulamadı';
         yukleniyor(false);
         resolve(ozet);
       }catch(e){
