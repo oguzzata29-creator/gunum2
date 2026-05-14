@@ -564,36 +564,29 @@ function render(){
   logoDiv.innerHTML='<span style="color:#e2e8f0">📋 </span><span class="logo">Günüm</span>';
   header.appendChild(logoDiv);
 
-  const gBtn=el('button');
-  if(state.gapiHazir&&state.giris){
-    gBtn.className='g-btn connected';
-    gBtn.innerHTML='🔗 Bağlı';
-    gBtn.onclick=googleCikis;
-  } else if(state.gapiHazir){
-    gBtn.className='g-btn disconnected';
-    gBtn.innerHTML='G Bağlan';
-    gBtn.onclick=googleGiris;
-  } else if(state.ayarlar.clientId){
-    gBtn.className='g-btn';
-    gBtn.style.cssText='color:#94a3b8;border-color:#475569';
-    gBtn.innerHTML='⏳ Yükleniyor';
-  } else {
-    gBtn.className='g-btn';
-    gBtn.style.cssText='color:#94a3b8;border-color:#475569';
-    gBtn.innerHTML='⚙️ API Gir';
-    gBtn.onclick=()=>{state.ekran='ayarlar';render();};
-  }
-  header.appendChild(gBtn);
+  // Sağ taraf - sadece kullanıcı adı ve çıkış
+  const sagDiv=el('div'); sagDiv.style.cssText='display:flex;align-items:center;gap:8px';
 
-  // Firebase kullanıcı + çıkış
+  if(state.gapiHazir&&state.giris){
+    const gBtn=el('button','g-btn connected');
+    gBtn.innerHTML='🔗 Bağlı'; gBtn.onclick=googleCikis;
+    sagDiv.appendChild(gBtn);
+  } else {
+    const gBtn=el('button','g-btn');
+    gBtn.style.cssText='color:#f59e0b;border-color:#f59e044;border:1px solid #f59e0b44;border-radius:20px;padding:5px 10px;font-size:11px;cursor:pointer;background:transparent';
+    gBtn.innerHTML='📅 Takvim Bağla';
+    gBtn.onclick=()=>{state.ekran='ayarlar';render();};
+    sagDiv.appendChild(gBtn);
+  }
+
   if(window.fbUser){
     const fbBtn=el('button');
-    fbBtn.style.cssText='background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;padding:4px 8px;border-radius:8px';
+    fbBtn.style.cssText='background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;padding:4px 6px';
     fbBtn.textContent='👤 '+window.fbUser.displayName?.split(' ')[0];
-    fbBtn.onclick=()=>{ if(confirm('Çıkış yapmak istiyor musun?')){ const {signOut}=window._fbFns; signOut(window._fbAuth); } };
-    header.appendChild(fbBtn);
+    fbBtn.onclick=()=>{ if(confirm('Çıkış?')){ const {signOut}=window._fbFns; signOut(window._fbAuth); } };
+    sagDiv.appendChild(fbBtn);
   }
-  app.appendChild(header);
+  header.appendChild(sagDiv);
 
   // Tarih bar
   const dateBar=el('div','date-bar');
@@ -829,6 +822,44 @@ function renderSablonlar(main){
 }
 
 function renderAyarlar(main){
+  // Google Takvim bağlantısı
+  const baglantiKart=el('div');
+  baglantiKart.style.cssText='background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px';
+  const bagBaslik=el('div');
+  bagBaslik.style.cssText='font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:12px';
+  bagBaslik.textContent='📅 Google Takvim & Gmail Bağlantısı';
+  baglantiKart.appendChild(bagBaslik);
+
+  if(state.gapiHazir && state.giris){
+    const bagliDiv=el('div');
+    bagliDiv.style.cssText='display:flex;align-items:center;justify-content:space-between';
+    const bagliTxt=el('div');
+    bagliTxt.style.cssText='color:#22c55e;font-size:13px';
+    bagliTxt.textContent='✅ Google hesabı bağlı';
+    const cikisBtn=el('button');
+    cikisBtn.style.cssText='background:#334155;border:none;color:#94a3b8;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer';
+    cikisBtn.textContent='Bağlantıyı Kes';
+    cikisBtn.onclick=googleCikis;
+    bagliDiv.append(bagliTxt,cikisBtn);
+    baglantiKart.appendChild(bagliDiv);
+  } else if(state.gapiHazir){
+    const baglanBtn=el('button');
+    baglanBtn.style.cssText='width:100%;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border:none;color:white;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer';
+    baglanBtn.textContent='🔗 Google Hesabına Bağlan';
+    baglanBtn.onclick=googleGiris;
+    baglantiKart.appendChild(baglanBtn);
+  } else if(state.ayarlar.clientId){
+    const yukDiv=el('div');
+    yukDiv.style.cssText='color:#94a3b8;font-size:13px;text-align:center;padding:8px';
+    yukDiv.textContent='⏳ Google API yükleniyor...';
+    baglantiKart.appendChild(yukDiv);
+  } else {
+    const bilgiDiv=el('div');
+    bilgiDiv.style.cssText='color:#64748b;font-size:12px';
+    bilgiDiv.textContent='Client ID ve API Key girdikten sonra bağlan butonu çıkacak.';
+    baglantiKart.appendChild(bilgiDiv);
+  }
+  main.appendChild(baglantiKart);
   const bilgi=el('div','ayar-bilgi');
   bilgi.innerHTML='<strong style="color:#60a5fa">📌 Google API Kurulumu</strong><br><br>'+
     '1. <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a>\'a git<br>'+
