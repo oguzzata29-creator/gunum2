@@ -1,1479 +1,931 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>Günüm — Günlük Planlayıcı</title>
-<style>
-:root {
-  --bg: #0f172a; --bg2: #1e293b; --bg3: #334155;
-  --txt: #e2e8f0; --txt2: #94a3b8; --txt3: #64748b;
-  --blue: #3b82f6; --green: #22c55e; --red: #ef4444; --yellow: #f59e0b;
-  --border: #334155;
-}
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
-#app{max-width:430px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:80px}
+import React, { useEffect, useMemo, useState } from "react";
 
-/* Header */
-.header{padding:18px 16px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:20}
-.logo{font-size:19px;font-weight:700;letter-spacing:-0.5px}
-.logo span{color:var(--blue)}
-.g-btn{display:flex;align-items:center;gap:5px;padding:6px 13px;border-radius:20px;border:1px solid;font-size:12px;font-weight:600;cursor:pointer;background:transparent}
-.g-btn.connected{color:var(--green);border-color:#22c55e44}
-.g-btn.disconnected{color:#fff;border-color:var(--blue);background:var(--blue)}
+// Günüm v12 — Plan + Notlar + Ürün Burner + Rapor
+// Tek dosyalık React sürümü. GitHub Pages üzerinde çalışacak şekilde tasarlandı.
 
-/* Date bar */
-.date-bar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--bg)}
-.date-nav{background:var(--bg2);border:none;color:var(--txt2);width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.date-input{flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:6px 10px;font-size:13px;outline:none;text-align:center}
-input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1)}
-input[type="time"]::-webkit-calendar-picker-indicator{filter:invert(1)}
+const SCOPES = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/documents",
+  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/spreadsheets",
+].join(" ");
 
-/* Tabs */
-.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:57px;z-index:19;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.tabs::-webkit-scrollbar{display:none}
-.tab{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 14px;background:none;border:none;border-bottom:2px solid transparent;color:var(--txt3);cursor:pointer;font-size:11px;transition:color .2s;white-space:nowrap}
-.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
-.tab-icon{font-size:15px}
-
-/* Main */
-.main{padding:14px 14px 20px}
-
-/* Blok kart */
-.blok-kart{background:var(--bg2);border-radius:12px;padding:11px 13px;border-left:3px solid var(--border);margin-bottom:9px;transition:opacity .2s}
-.blok-kart.tamamlandi{border-left-color:var(--green)}
-.blok-kart.kacirildi{border-left-color:var(--red);opacity:.75}
-.blok-icerik{display:flex;align-items:center;gap:9px}
-.check-group{display:flex;flex-direction:column;gap:4px}
-.check-btn{width:24px;height:24px;border-radius:6px;border:1.5px solid;background:transparent;cursor:pointer;font-size:12px;color:#fff;display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s}
-.check-btn.ok{border-color:var(--green)}
-.check-btn.ok.active{background:var(--green)}
-.check-btn.no{border-color:var(--red)}
-.check-btn.no.active{background:var(--red)}
-.blok-bilgi{flex:1;min-width:0}
-.blok-baslik{font-weight:600;font-size:15px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.blok-baslik.kacirildi{text-decoration:line-through;color:var(--txt3)}
-.blok-alt{font-size:12px;color:var(--txt2);margin-top:2px}
-.blok-not{font-size:11px;color:var(--txt3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.blok-actions{display:flex;gap:4px}
-.mini-btn{background:none;border:none;cursor:pointer;font-size:14px;padding:4px;color:var(--txt2)}
-
-/* Ekle butonu */
-.ekle-btn{width:100%;margin-top:14px;background:linear-gradient(135deg,#1d4ed8,var(--blue));color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;letter-spacing:.2px}
-.sablon-btn{background:var(--bg3);border:none;color:var(--txt2);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
-
-/* Boş ekran */
-.bos{display:flex;flex-direction:column;align-items:center;padding:48px 20px;text-align:center}
-.bos-icon{font-size:44px;margin-bottom:12px}
-.bos-txt{color:var(--txt2);line-height:1.6;font-size:14px}
-
-/* Özet kartlar */
-.ozet-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px}
-.ozet-kart{background:var(--bg2);border-radius:12px;padding:14px 8px;text-align:center;border-top:2px solid}
-.ozet-sayi{font-size:26px;font-weight:700}
-.ozet-label{font-size:11px;color:var(--txt2);margin-top:3px}
-.progress-bar-wrap{height:10px;background:var(--bg2);border-radius:10px;overflow:hidden;margin-bottom:6px}
-.progress-bar{height:100%;border-radius:10px;transition:width .5s ease}
-.progress-label{font-size:12px;color:var(--txt3);text-align:center;margin-bottom:18px}
-.section-title{font-size:12px;font-weight:600;color:var(--txt3);margin-bottom:10px;letter-spacing:.5px}
-.kat-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.kat-bar-wrap{flex:1}
-.kat-bar-top{display:flex;justify-content:space-between;margin-bottom:3px;font-size:12px}
-.kat-bar{height:4px;background:var(--bg2);border-radius:4px;overflow:hidden}
-.kat-bar-fill{height:100%;border-radius:4px}
-.rapor-liste-row{display:flex;align-items:center;gap:9px;padding:10px 0;border-bottom:1px solid var(--bg2)}
-.rapor-gonder{width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,#1d4ed8,var(--blue));color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-top:18px}
-.rapor-gonder:disabled{opacity:.5;cursor:not-allowed}
-
-/* Şablon */
-.sablon-kart{background:var(--bg2);border-radius:12px;padding:13px;border-left:3px solid var(--blue);margin-bottom:10px}
-.sablon-kart-ust{display:flex;justify-content:space-between;align-items:flex-start}
-.sablon-isim{font-weight:600;font-size:15px;color:var(--txt)}
-.sablon-meta{font-size:12px;color:var(--txt3);margin-top:2px}
-.sablon-preview{font-size:12px;color:var(--txt2);margin-top:6px}
-.sablon-uygula{background:var(--bg3);border:none;color:var(--txt2);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
-
-/* Ayarlar */
-.ayar-bilgi{background:var(--bg2);border-radius:12px;padding:14px;margin-bottom:18px;font-size:12px;color:var(--txt2);line-height:1.8}
-.ayar-bilgi a{color:var(--blue)}
-.ayar-grup{margin-bottom:14px}
-.label{font-size:12px;font-weight:600;color:var(--txt3);display:block;margin-bottom:6px}
-.input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--txt);border-radius:10px;padding:10px 12px;font-size:14px;outline:none;font-family:inherit}
-.input:focus{border-color:var(--blue)}
-.ayar-not{font-size:12px;color:var(--txt3);background:var(--bg2);border-radius:8px;padding:12px;margin-top:4px}
-
-/* Modal */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;z-index:100}
-.modal{background:var(--bg2);border-radius:20px 20px 0 0;padding:22px 18px 36px;width:100%;max-width:430px;max-height:92vh;overflow-y:auto}
-.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-.modal-title{font-size:17px;font-weight:700;color:var(--txt)}
-.modal-kapat{background:none;border:none;color:var(--txt2);font-size:20px;cursor:pointer}
-.form-row{margin-bottom:13px}
-.time-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px}
-.kat-secim{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px}
-.kat-chip{padding:6px 11px;border-radius:20px;border:2px solid transparent;font-size:12px;cursor:pointer;background:var(--bg);color:var(--txt2);transition:all .15s}
-.sure-preview{text-align:center;font-size:13px;color:var(--txt2);margin-bottom:12px}
-.modal-footer{display:flex;gap:9px;margin-top:18px}
-.iptal-btn{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--txt2);font-size:14px;cursor:pointer}
-.kaydet-btn{flex:2;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#1d4ed8,var(--blue));color:#fff;font-size:14px;font-weight:600;cursor:pointer}
-.kaydet-btn:disabled{opacity:.5;cursor:not-allowed}
-textarea.input{resize:vertical}
-
-/* Bildirim */
-.bildirim{position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:20px;color:#fff;font-size:13px;font-weight:600;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.4);white-space:nowrap;animation:slideIn .3s ease}
-@keyframes slideIn{from{opacity:0;top:0}to{opacity:1;top:16px}}
-
-/* Yükleniyor */
-.loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:200}
-.loading-box{background:var(--bg2);border-radius:16px;padding:24px 32px;display:flex;flex-direction:column;align-items:center;gap:12px}
-.spinner{width:32px;height:32px;border:3px solid var(--bg3);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-::-webkit-scrollbar{width:4px}
-::-webkit-scrollbar-track{background:var(--bg)}
-::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:4px}
-</style>
-</head>
-<body>
-<div id="app"></div>
-
-<script type="module">
-// ── Firebase ES Module ────────────────────────────────────────────────────────
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyB31uWK1kdWMSfGE4vjkJZk6gYj5S9BIjM",
-  authDomain: "gunum-57de4.firebaseapp.com",
-  projectId: "gunum-57de4",
-  storageBucket: "gunum-57de4.firebasestorage.app",
-  messagingSenderId: "945375339295",
-  appId: "1:945375339295:web:ce3fd6d4306901d0fe862a"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-// Global erişim için window'a ekle
-window._fbAuth = auth;
-window._fbDb = db;
-window._fbFns = { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, doc, setDoc, getDoc, collection, getDocs, deleteDoc };
-
-// Auth state listener
-onAuthStateChanged(auth, user => {
-  window.fbUser = user;
-  window.fbAuthHazir = true;
-  if(user){
-    window.fbSyncBaslat && window.fbSyncBaslat();
-  } else {
-    window.render && window.render();
-  }
-});
-</script>
-
-
-<script>
-// ── Ana Uygulama ──────────────────────────────────────────────────────────────
-let fbUser = null;
-let fbAuthHazir = false;
-
-// Firebase fonksiyonları - ES module script'ten gelir
-function getDb(){ return window._fbDb; }
-function getAuth2(){ return window._fbAuth; }
-
-async function fbKaydet(koleksiyon, id, veri){
-  if(!window.fbUser) return;
-  try{
-    const {doc, setDoc} = window._fbFns;
-    await setDoc(doc(getDb(),'users',window.fbUser.uid,koleksiyon,id), veri, {merge:true});
-  }catch(e){ console.warn('FB kaydet:', e.message); }
-}
-
-async function fbSil(koleksiyon, id){
-  if(!window.fbUser) return;
-  try{
-    const {doc, deleteDoc} = window._fbFns;
-    await deleteDoc(doc(getDb(),'users',window.fbUser.uid,koleksiyon,id));
-  }catch(e){ console.warn('FB sil:', e.message); }
-}
-
-async function fbYukle(koleksiyon){
-  if(!window.fbUser) return [];
-  try{
-    const {collection, getDocs} = window._fbFns;
-    const snap = await getDocs(collection(getDb(),'users',window.fbUser.uid,koleksiyon));
-    return snap.docs.map(d=>d.data());
-  }catch(e){ console.warn('FB yükle:', e.message); return []; }
-}
-
-async function fbAyarKaydet(ayarlar){
-  if(!window.fbUser) return;
-  try{
-    const {doc, setDoc} = window._fbFns;
-    await setDoc(doc(getDb(),'users',window.fbUser.uid), {ayarlar}, {merge:true});
-  }catch(e){}
-}
-
-async function fbAyarYukle(){
-  if(!window.fbUser) return null;
-  try{
-    const {doc, getDoc} = window._fbFns;
-    const d = await getDoc(doc(getDb(),'users',window.fbUser.uid));
-    return d.exists() ? d.data().ayarlar : null;
-  }catch(e){ return null; }
-}
-
-window.fbSyncBaslat = async function(){
-  if(!window.fbUser) return;
-  const fbAyarlar = await fbAyarYukle();
-  if(fbAyarlar){ state.ayarlar={...state.ayarlar,...fbAyarlar}; kaydet('ayarlar',state.ayarlar); }
-  const fbNotlar = await fbYukle('notlar');
-  if(fbNotlar.length>0){ state.notlar=fbNotlar; kaydet('kitap_notlar',state.notlar); }
-  const fbUrunler = await fbYukle('urunler');
-  if(fbUrunler.length>0){ state.urunler=fbUrunler; kaydet('urun_listesi',state.urunler); }
-  const fbPlanlar = await fbYukle('planlar');
-  fbPlanlar.forEach(p=>{ if(p.tarih&&p.bloklar) kaydet('plan_'+p.tarih,p.bloklar); });
-  render();
-  bildirimGoster('Veriler senkronize edildi ✓');
-};
-
-function fbGirisEkrani(app){
-  const div=el('div');
-  div.style.cssText='min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;background:#0f172a';
-  div.innerHTML=`
-    <div style="font-size:48px;margin-bottom:16px">📋</div>
-    <h1 style="color:#e2e8f0;font-size:24px;font-weight:700;margin-bottom:8px">Günüm</h1>
-    <p style="color:#94a3b8;font-size:14px;margin-bottom:32px;text-align:center">Günlük planlayıcın.<br>Tüm cihazlarında senkronize.</p>
-    <button id="googleGirisBtn" style="display:flex;align-items:center;gap:10px;background:white;color:#1f2937;border:none;border-radius:12px;padding:14px 24px;font-size:15px;font-weight:600;cursor:pointer;width:100%;max-width:280px;justify-content:center">
-      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-      Google ile Giriş Yap
-    </button>
-    <p style="color:#475569;font-size:12px;margin-top:20px;text-align:center">Veriler Google hesabında güvenle saklanır</p>`;
-  app.appendChild(div);
-  document.getElementById('googleGirisBtn').onclick=async()=>{
-    try{
-      const {signInWithPopup, GoogleAuthProvider} = window._fbFns;
-      await signInWithPopup(getAuth2(), new GoogleAuthProvider());
-    }catch(e){ bildirimGoster('Giriş başarısız: '+e.message,'hata'); }
-  };
-}
-
-// İlk yükleme göstergesi
-document.getElementById('app').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px"><div class="spinner"></div><span style="color:#64748b;font-size:14px">Yükleniyor...</span></div>';
-
-window.render = function(){ render(); };
-</script>
-
-<script>
-// ── Veri ──────────────────────────────────────────────────────────────────────
-const KATEGORILER = [
-  {id:'spor',   label:'Spor',      emoji:'🏃', renk:'#4ade80', cid:'2'},
-  {id:'is',     label:'İş',        emoji:'💼', renk:'#60a5fa', cid:'9'},
-  {id:'kisisel',label:'Gelişim',   emoji:'📚', renk:'#f59e0b', cid:'5'},
-  {id:'yemek',  label:'Yemek',     emoji:'☕', renk:'#fb923c', cid:'6'},
-  {id:'sosyal', label:'Sosyal',    emoji:'👥', renk:'#a78bfa', cid:'3'},
-  {id:'diger',  label:'Diğer',     emoji:'✦',  renk:'#94a3b8', cid:'8'},
+const CATEGORIES = [
+  { id: "spor", label: "Spor / Hareket", emoji: "🏃", color: "#4ade80", googleColorId: "2" },
+  { id: "is", label: "İş / Proje", emoji: "💼", color: "#60a5fa", googleColorId: "9" },
+  { id: "kisisel", label: "Kişisel Gelişim", emoji: "📚", color: "#f59e0b", googleColorId: "5" },
+  { id: "yemek", label: "Yemek / Mola", emoji: "☕", color: "#fb923c", googleColorId: "6" },
+  { id: "sosyal", label: "Sosyal", emoji: "👥", color: "#a78bfa", googleColorId: "3" },
+  { id: "diger", label: "Diğer", emoji: "✦", color: "#94a3b8", googleColorId: "8" },
 ];
 
-const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/documents';
-
-let state = {
-  ekran: 'plan',
-  tarih: bugunTarihi(),
-  bloklar: [],
-  sablonlar: yukle('sablonlar', []),
-  notlar: yukle('kitap_notlar', []),
-  urunler: yukle('urun_listesi', []),
-  ayarlar: yukle('ayarlar', {clientId:'', apiKey:'', email:'', geminiKey:'', openaiKey:''}),
-  sheetId: yukle('sheet_id', null),
-  docId: yukle('doc_id', null),
-  modal: null,
-  gapiHazir: false,
-  giris: false,
-  accessToken: null,
-  yukleniyor: false,
+const EMPTY_BLOCK = {
+  id: "",
+  title: "",
+  start: "08:00",
+  end: "09:00",
+  category: "diger",
+  note: "",
+  status: null,
+  calendarEventId: null,
 };
 
-function bugunTarihi(){ return new Date().toISOString().split('T')[0]; }
-function yukle(k,d){ try{return JSON.parse(localStorage.getItem(k))??d}catch{return d} }
-function kaydet(k,v){ localStorage.setItem(k,JSON.stringify(v)); }
-function uid(){ return Math.random().toString(36).slice(2,10); }
-function dkFark(a,b){ const[ah,am]=a.split(':').map(Number);const[bh,bm]=b.split(':').map(Number);return(bh*60+bm)-(ah*60+am); }
-function sureFmt(a,b){ const d=dkFark(a,b);if(d<=0)return'—';const h=Math.floor(d/60),m=d%60;if(!h)return m+'dk';if(!m)return h+'s';return h+'s '+m+'dk'; }
-function katEmoji(id){ return KATEGORILER.find(k=>k.id===id)?.emoji??'✦'; }
-function katRenk(id){ return KATEGORILER.find(k=>k.id===id)?.renk??'#94a3b8'; }
-function katCid(id){ return KATEGORILER.find(k=>k.id===id)?.cid??'8'; }
-function saatDate(tarih,saat){ const[h,m]=saat.split(':').map(Number);const d=new Date(tarih);d.setHours(h,m,0,0);return d.toISOString(); }
+const EMPTY_PRODUCT = {
+  id: "",
+  name: "",
+  socialUrl: "",
+  productUrl: "",
+  marketplace: "",
+  viralScore: "",
+  potential: "Orta",
+  notes: "",
+  createdAt: "",
+};
 
-function yukleBloklari(t){ state.bloklar = yukle('plan_'+t,[]); }
-function kaydEtBloklari(){ kaydet('plan_'+state.tarih, state.bloklar); }
+const READY_TEMPLATES = [
+  {
+    id: "standart-gun",
+    name: "Standart Gün",
+    blocks: [
+      { title: "Spor", start: "08:00", end: "09:00", category: "spor", note: "" },
+      { title: "Burner", start: "10:00", end: "11:30", category: "kisisel", note: "Burner / Instagram–TikTok" },
+      { title: "Yapay Zeka Eğitim", start: "11:45", end: "13:00", category: "kisisel", note: "Yapay Zeka Kreatif Eğitimi" },
+      { title: "Burner", start: "13:30", end: "14:45", category: "kisisel", note: "Burner / Instagram–TikTok" },
+      { title: "Günlük Kargo Teslim", start: "15:00", end: "16:00", category: "is", note: "Kargo Teslimi" },
+      { title: "Kreatif Hazırlama / Patila", start: "16:00", end: "17:30", category: "is", note: "Patila için kreatifler hazırla" },
+      { title: "Berkan 1-1", start: "18:30", end: "18:55", category: "kisisel", note: "" },
+    ],
+  },
+];
 
-yukleBloklari(state.tarih);
+function hydrateTemplateBlocks(templateBlocks) {
+  return templateBlocks.map((b) => ({
+    ...EMPTY_BLOCK,
+    ...b,
+    id: uid(),
+    status: null,
+    calendarEventId: null,
+  }));
+}
 
-// ── Google API (GIS + GAPI) ───────────────────────────────────────────────────
-let tokenClient = null;
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
 
-// URL'deki access token'ı kontrol et (redirect sonrası)
-function tokenKontrol(){
-  const hash = window.location.hash;
-  if(hash.includes('access_token')){
-    const params = new URLSearchParams(hash.slice(1));
-    const token = params.get('access_token');
-    if(token){
-      state.accessToken = token;
-      state.giris = true;
-      // Hash'i temizle
-      history.replaceState(null,'',window.location.pathname+window.location.search);
-      gapiClientBaslat();
-    }
+function nowTR() {
+  return new Date().toLocaleString("tr-TR");
+}
+
+function uid() {
+  return crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 11);
+}
+
+function storageGet(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
   }
 }
 
-function gapiBaslat(){
-  if(!state.ayarlar.clientId||!state.ayarlar.apiKey) return;
-  if(window._gapiLoading) return;
-  window._gapiLoading=true;
-
-  // Önce token kontrol et
-  tokenKontrol();
-
-  const s=document.createElement('script');
-  s.src='https://apis.google.com/js/api.js';
-  s.onload=()=>{
-    gapi.load('client',async()=>{
-      await gapi.client.init({ apiKey: state.ayarlar.apiKey });
-      state.gapiHazir=true;
-      if(state.accessToken){
-        gapi.client.setToken({access_token: state.accessToken});
-      }
-      render();
-    });
-  };
-  document.body.appendChild(s);
+function storageSet(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
 }
 
-function gapiClientBaslat(){
-  if(window.gapi && window.gapi.client){
-    gapi.client.setToken({access_token: state.accessToken});
-    render();
-  }
+function toMinutes(time) {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
 }
 
-function googleGiris(){
-  if(!state.ayarlar.clientId){ bildirimGoster('Client ID girilmedi','hata'); return; }
-  // Implicit flow ile redirect - popup yok, CSP sorunu yok
-  const params = new URLSearchParams({
-    client_id: state.ayarlar.clientId,
-    redirect_uri: window.location.href.split('#')[0].split('?')[0],
-    response_type: 'token',
-    scope: SCOPES,
-    include_granted_scopes: 'true',
-  });
-  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+function minutesDiff(start, end) {
+  return toMinutes(end) - toMinutes(start);
 }
 
-function googleCikis(){
-  state.accessToken = null;
-  state.giris = false;
-  if(window.gapi && window.gapi.client) gapi.client.setToken(null);
-  bildirimGoster('Çıkış yapıldı');
-  render();
+function durationText(start, end) {
+  const diff = minutesDiff(start, end);
+  if (diff <= 0) return "—";
+  const h = Math.floor(diff / 60);
+  const m = diff % 60;
+  if (!h) return `${m}dk`;
+  if (!m) return `${h}s`;
+  return `${h}s ${m}dk`;
 }
 
-// ── Bildirim ──────────────────────────────────────────────────────────────────
-let bildirimTimer=null;
-function bildirimGoster(mesaj,tip='ok'){
-  const el=document.createElement('div');
-  el.className='bildirim';
-  el.textContent=mesaj;
-  el.style.background=tip==='hata'?'#ef4444':tip==='uyari'?'#f59e0b':'#22c55e';
-  document.body.appendChild(el);
-  if(bildirimTimer)clearTimeout(bildirimTimer);
-  bildirimTimer=setTimeout(()=>el.remove(),3000);
+function dateTimeForGoogle(date, time) {
+  return `${date}T${time}:00+03:00`;
 }
 
-// ── Blok işlemleri ────────────────────────────────────────────────────────────
-async function calendarFetch(method, url, body){
-  const res = await fetch(url, {
-    method,
-    headers: {
-      'Authorization': 'Bearer '+state.accessToken,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||res.statusText); }
-  return method==='DELETE' ? null : res.json();
+function categoryById(id) {
+  return CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
 }
 
-async function blokKaydet(blok){
-  yukleniyor(true);
-  let yeni={...blok};
-  if(state.giris && state.accessToken){
-    try{
-      const etkinlik={
-        summary: katEmoji(blok.kategori)+' '+blok.baslik,
-        description: blok.not||'',
-        start:{dateTime:saatDate(state.tarih,blok.baslangic),timeZone:'Europe/Istanbul'},
-        end:{dateTime:saatDate(state.tarih,blok.bitis),timeZone:'Europe/Istanbul'},
-        colorId: katCid(blok.kategori),
-      };
-      if(blok.calendarEventId){
-        await calendarFetch('PUT',
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${blok.calendarEventId}`,
-          etkinlik);
-      } else {
-        const res=await calendarFetch('POST',
-          'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-          etkinlik);
-        yeni.calendarEventId=res.id;
-      }
-      bildirimGoster('Google Calendar\'a eklendi ✓');
-    }catch(e){ bildirimGoster('Calendar hatası: '+e.message,'hata'); }
-  }
-  const idx=state.bloklar.findIndex(b=>b.id===blok.id);
-  if(idx>=0) state.bloklar[idx]=yeni;
-  else state.bloklar.push(yeni);
-  state.bloklar.sort((a,b)=>a.baslangic.localeCompare(b.baslangic));
-  kaydEtBloklari();
-  // Firebase'e kaydet
-  fbKaydet('planlar', state.tarih, {tarih: state.tarih, bloklar: state.bloklar});
-  state.modal=null;
-  yukleniyor(false);
-  render();
-}
-
-async function blokSil(blok){
-  if(blok.calendarEventId && state.giris && state.accessToken){
-    try{
-      await calendarFetch('DELETE',
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${blok.calendarEventId}`);
-    }catch{}
-  }
-  state.bloklar=state.bloklar.filter(b=>b.id!==blok.id);
-  kaydEtBloklari();
-  fbKaydet('planlar', state.tarih, {tarih: state.tarih, bloklar: state.bloklar});
-  bildirimGoster('Blok silindi');
-  render();
-}
-
-function tamamlandiToggle(id,durum){
-  state.bloklar=state.bloklar.map(b=>b.id===id?{...b,tamamlandi:durum}:b);
-  kaydEtBloklari();
-  fbKaydet('planlar', state.tarih, {tarih: state.tarih, bloklar: state.bloklar});
-  render();
-}
-
-// ── Şablon ────────────────────────────────────────────────────────────────────
-function sablonKaydet(){
-  const isim=prompt('Şablon adı:');
-  if(!isim)return;
-  state.sablonlar.push({
-    id:uid(), isim,
-    tarih: new Date().toLocaleDateString('tr-TR'),
-    bloklar: state.bloklar.map(({tamamlandi,calendarEventId,...rest})=>({...rest,id:uid(),tamamlandi:null,calendarEventId:null}))
-  });
-  kaydet('sablonlar',state.sablonlar);
-  bildirimGoster('Şablon kaydedildi ✓');
-  render();
-}
-
-function sablonUygula(s){
-  state.bloklar=s.bloklar.map(b=>({...b,id:uid()})).sort((a,b)=>a.baslangic.localeCompare(b.baslangic));
-  kaydEtBloklari();
-  state.ekran='plan';
-  bildirimGoster('"'+s.isim+'" şablonu uygulandı ✓');
-  render();
-}
-
-function sablonSil(id){
-  state.sablonlar=state.sablonlar.filter(s=>s.id!==id);
-  kaydet('sablonlar',state.sablonlar);
-  render();
-}
-
-// ── Rapor gönder ──────────────────────────────────────────────────────────────
-async function raporGonder(){
-  if(!state.giris||!state.accessToken){bildirimGoster('Önce Google hesabına giriş yap','uyari');return;}
-  if(!state.ayarlar.email){bildirimGoster('Ayarlardan e-posta adresini gir','uyari');return;}
-  yukleniyor(true);
-  const {tam,kac}=raporHesapla();
-  const toplam=state.bloklar.length;
-  const basari=toplam>0?Math.round(tam/toplam*100):0;
-  const satirlar=state.bloklar.map(b=>`<tr>
-    <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${b.tamamlandi===true?'✅':b.tamamlandi===false?'❌':'⬜'}</td>
-    <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${b.baslangic} - ${b.bitis}</td>
-    <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${katEmoji(b.kategori)} ${b.baslik}</td>
-    <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#64748b">${sureFmt(b.baslangic,b.bitis)}</td>
-  </tr>`).join('');
-  const html=`<div style="font-family:sans-serif;max-width:600px;margin:auto;background:#f8fafc;padding:32px">
-  <h1 style="color:#0f172a;margin:0 0 4px">Günlük Plan Raporu</h1>
-  <p style="color:#64748b;margin:0 0 24px">${new Date(state.tarih).toLocaleDateString('tr-TR',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
-  <div style="display:flex;gap:16px;margin-bottom:28px">
-    <div style="background:white;border-radius:12px;padding:16px;flex:1;text-align:center"><div style="font-size:28px;font-weight:700;color:#22c55e">${tam}</div><div style="font-size:12px;color:#64748b">Tamamlandı</div></div>
-    <div style="background:white;border-radius:12px;padding:16px;flex:1;text-align:center"><div style="font-size:28px;font-weight:700;color:#ef4444">${kac}</div><div style="font-size:12px;color:#64748b">Kaçırıldı</div></div>
-    <div style="background:white;border-radius:12px;padding:16px;flex:1;text-align:center"><div style="font-size:28px;font-weight:700;color:#f59e0b">${basari}%</div><div style="font-size:12px;color:#64748b">Başarı</div></div>
-  </div>
-  <table style="width:100%;background:white;border-radius:12px;border-collapse:collapse"><thead><tr style="background:#0f172a;color:white"><th style="padding:10px 12px;text-align:left;font-size:13px">Durum</th><th style="padding:10px 12px;text-align:left;font-size:13px">Saat</th><th style="padding:10px 12px;text-align:left;font-size:13px">Aktivite</th><th style="padding:10px 12px;text-align:left;font-size:13px">Süre</th></tr></thead><tbody>${satirlar}</tbody></table>
-  <p style="color:#94a3b8;font-size:12px;margin-top:24px;text-align:center">Günüm Planlayıcı tarafından gönderildi</p></div>`;
-  const mesaj=['To: '+state.ayarlar.email,'Content-Type: text/html; charset=utf-8','MIME-Version: 1.0',
-    'Subject: =?utf-8?B?'+btoa(unescape(encodeURIComponent('Günlük Rapor — '+state.tarih)))+'?=','',html].join('\n');
-  const encoded=btoa(unescape(encodeURIComponent(mesaj))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  try{
-    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer '+state.accessToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({raw: encoded}),
-    });
-    if(!res.ok) throw new Error((await res.json()).error?.message);
-    bildirimGoster('Rapor gönderildi ✓');
-  }catch(e){ bildirimGoster('Mail hatası: '+e.message,'hata'); }
-  yukleniyor(false);
-}
-
-function raporHesapla(){
-  return {
-    tam: state.bloklar.filter(b=>b.tamamlandi===true).length,
-    kac: state.bloklar.filter(b=>b.tamamlandi===false).length,
-    bel: state.bloklar.filter(b=>b.tamamlandi===null).length,
-  };
-}
-
-function yukleniyor(v){ state.yukleniyor=v; render(); }
-
-// ── Render ────────────────────────────────────────────────────────────────────
-function render(){
-  const app=document.getElementById('app');
-  app.innerHTML='';
-
-  // Firebase giriş kontrolü
-  if(!window.fbUser){
-    fbGirisEkrani(app);
-    return;
-  }
-
-  // Header
-  const header=el('div','header');
-  const logoDiv=el('div');
-  logoDiv.innerHTML='<span style="color:#e2e8f0">📋 </span><span class="logo">Günüm</span>';
-  header.appendChild(logoDiv);
-
-  // Sağ taraf - sadece kullanıcı adı ve çıkış
-  const sagDiv=el('div'); sagDiv.style.cssText='display:flex;align-items:center;gap:8px';
-
-  if(state.gapiHazir&&state.giris){
-    const gBtn=el('button','g-btn connected');
-    gBtn.innerHTML='🔗 Bağlı'; gBtn.onclick=googleCikis;
-    sagDiv.appendChild(gBtn);
-  } else {
-    const gBtn=el('button','g-btn');
-    gBtn.style.cssText='color:#f59e0b;border-color:#f59e044;border:1px solid #f59e0b44;border-radius:20px;padding:5px 10px;font-size:11px;cursor:pointer;background:transparent';
-    gBtn.innerHTML='📅 Takvim Bağla';
-    gBtn.onclick=()=>{state.ekran='ayarlar';render();};
-    sagDiv.appendChild(gBtn);
-  }
-
-  if(window.fbUser){
-    const fbBtn=el('button');
-    fbBtn.style.cssText='background:none;border:none;cursor:pointer;font-size:11px;color:#64748b;padding:4px 6px';
-    fbBtn.textContent='👤 '+window.fbUser.displayName?.split(' ')[0];
-    fbBtn.onclick=()=>{ if(confirm('Çıkış?')){ const {signOut}=window._fbFns; signOut(window._fbAuth); } };
-    sagDiv.appendChild(fbBtn);
-  }
-  header.appendChild(sagDiv);
-
-  // Tarih bar
-  const dateBar=el('div','date-bar');
-  const prevBtn=el('button','date-nav'); prevBtn.textContent='‹';
-  prevBtn.onclick=()=>{ const d=new Date(state.tarih);d.setDate(d.getDate()-1);state.tarih=d.toISOString().split('T')[0];yukleBloklari(state.tarih);render(); };
-  const dateInp=document.createElement('input');
-  dateInp.type='date'; dateInp.value=state.tarih; dateInp.className='date-input';
-  dateInp.onchange=e=>{state.tarih=e.target.value;yukleBloklari(state.tarih);render();};
-  const nextBtn=el('button','date-nav'); nextBtn.textContent='›';
-  nextBtn.onclick=()=>{ const d=new Date(state.tarih);d.setDate(d.getDate()+1);state.tarih=d.toISOString().split('T')[0];yukleBloklari(state.tarih);render(); };
-  dateBar.append(prevBtn,dateInp,nextBtn);
-  app.appendChild(dateBar);
-
-  // Tabs
-  const tabs=el('div','tabs');
-  [['plan','📋','Plan'],['notlar','📸','Notlar'],['urunler','🛍️','Ürünler'],['rapor','📊','Rapor'],['ayarlar','⚙️','Ayarlar']].forEach(([id,icon,lbl])=>{
-    const t=el('button','tab'+(state.ekran===id?' active':''));
-    t.innerHTML=`<span class="tab-icon">${icon}</span><span>${lbl}</span>`;
-    t.onclick=()=>{state.ekran=id;render();};
-    tabs.appendChild(t);
-  });
-  app.appendChild(tabs);
-
-  // Main
-  const main=el('div','main');
-  if(state.ekran==='plan') renderPlan(main);
-  else if(state.ekran==='rapor') renderRapor(main);
-  else if(state.ekran==='sablonlar') renderSablonlar(main);
-  else if(state.ekran==='notlar') renderNotlar(main);
-  else if(state.ekran==='urunler') renderUrunler(main);
-  else if(state.ekran==='ayarlar') renderAyarlar(main);
-  app.appendChild(main);
-
-  // Modal
-  if(state.modal?.tip==='blok') renderModal(app);
-  else if(state.modal?.tip==='urun') renderUrunModal(app);
-
-  // Yükleniyor
-  if(state.yukleniyor){
-    const ov=el('div','loading-overlay');
-    const box=el('div','loading-box');
-    box.innerHTML='<div class="spinner"></div><span style="color:#e2e8f0;font-size:14px">İşleniyor...</span>';
-    ov.appendChild(box); app.appendChild(ov);
-  }
-}
-
-function renderPlan(main){
-  const toplamDk=state.bloklar.reduce((a,b)=>a+Math.max(0,dkFark(b.baslangic,b.bitis)),0);
-  const ust=el('div');
-  ust.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
-  const info=el('div');
-  info.style.cssText='color:#94a3b8;font-size:13px';
-  info.textContent=state.bloklar.length+' aktivite · '+Math.floor(toplamDk/60)+'s '+(toplamDk%60)+'dk';
-  ust.appendChild(info);
-  if(state.bloklar.length>0){
-    const sb=el('button','sablon-btn');
-    sb.textContent='💾 Şablon Kaydet';
-    sb.onclick=sablonKaydet;
-    ust.appendChild(sb);
-
-    const shBtn=el('button');
-    shBtn.style.cssText='background:#0f9d58;border:none;color:white;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer';
-    shBtn.textContent='📊 Sheets';
-    shBtn.onclick=planSheetsEkle;
-    ust.appendChild(shBtn);
-  }
-  main.appendChild(ust);
-
-  if(state.bloklar.length===0){
-    const bos=el('div','bos');
-    bos.innerHTML='<div class="bos-icon">🗓️</div><div class="bos-txt">Henüz plan yok.<br>Aşağıdan yeni blok ekle.</div>';
-    main.appendChild(bos);
-  } else {
-    state.bloklar.forEach(blok=>{
-      const durum=blok.tamamlandi===true?'tamamlandi':blok.tamamlandi===false?'kacirildi':'';
-      const kart=el('div','blok-kart '+durum);
-      kart.style.borderLeftColor=blok.tamamlandi===true?'#22c55e':blok.tamamlandi===false?'#ef4444':katRenk(blok.kategori);
-      const ic=el('div','blok-icerik');
-
-      // Check buttons
-      const cg=el('div','check-group');
-      const okBtn=el('button','check-btn ok'+(blok.tamamlandi===true?' active':''));
-      okBtn.textContent='✓'; okBtn.title='Tamamlandı';
-      okBtn.onclick=()=>tamamlandiToggle(blok.id,blok.tamamlandi===true?null:true);
-      const noBtn=el('button','check-btn no'+(blok.tamamlandi===false?' active':''));
-      noBtn.textContent='✗'; noBtn.title='Tamamlanamadı';
-      noBtn.onclick=()=>tamamlandiToggle(blok.id,blok.tamamlandi===false?null:false);
-      cg.append(okBtn,noBtn);
-
-      // Bilgi
-      const bilgi=el('div','blok-bilgi');
-      const baslik=el('div','blok-baslik'+(blok.tamamlandi===false?' kacirildi':''));
-      baslik.textContent=katEmoji(blok.kategori)+' '+blok.baslik;
-      const alt=el('div','blok-alt');
-      alt.innerHTML=blok.baslangic+' – '+blok.bitis+
-        ' <span style="color:'+katRenk(blok.kategori)+'">'+sureFmt(blok.baslangic,blok.bitis)+'</span>'+
-        (blok.calendarEventId?' 📅':'');
-      bilgi.append(baslik,alt);
-      if(blok.not){ const n=el('div','blok-not');n.textContent=blok.not;bilgi.appendChild(n); }
-
-      // Actions
-      const acts=el('div','blok-actions');
-      const edit=el('button','mini-btn'); edit.textContent='✏️';
-      edit.onclick=()=>{state.modal={tip:'blok',veri:{...blok}};render();};
-      const del=el('button','mini-btn'); del.textContent='🗑️'; del.style.color='#ef4444';
-      del.onclick=()=>blokSil(blok);
-      acts.append(edit,del);
-
-      ic.append(cg,bilgi,acts);
-      kart.appendChild(ic);
-      main.appendChild(kart);
-    });
-  }
-
-  const ekleBtn=el('button','ekle-btn');
-  ekleBtn.textContent='+ Yeni Blok Ekle';
-  ekleBtn.onclick=()=>{state.modal={tip:'blok',veri:{id:uid(),baslik:'',baslangic:'08:00',bitis:'09:00',kategori:'diger',not:'',tamamlandi:null,calendarEventId:null}};render();};
-  main.appendChild(ekleBtn);
-}
-
-function renderRapor(main){
-  const {tam,kac,bel}=raporHesapla();
-  const toplam=state.bloklar.length;
-  const basari=toplam>0?Math.round(tam/toplam*100):0;
-
-  const grid=el('div','ozet-grid');
-  [[tam,'Tamamlandı','#22c55e'],[kac,'Kaçırıldı','#ef4444'],[basari+'%','Başarı','#f59e0b']].forEach(([sayi,lbl,renk])=>{
-    const k=el('div','ozet-kart'); k.style.borderTopColor=renk;
-    k.innerHTML=`<div class="ozet-sayi" style="color:${renk}">${sayi}</div><div class="ozet-label">${lbl}</div>`;
-    grid.appendChild(k);
-  });
-  main.appendChild(grid);
-
-  if(toplam>0){
-    const pbw=el('div','progress-bar-wrap');
-    const pb=el('div','progress-bar');
-    pb.style.cssText='width:'+basari+'%;background:'+(basari>=80?'#22c55e':basari>=50?'#f59e0b':'#ef4444');
-    pbw.appendChild(pb); main.appendChild(pbw);
-    const pl=el('div','progress-label');
-    pl.textContent=bel>0?bel+' aktivite henüz işaretlenmedi':'Tüm aktiviteler işaretlendi ✓';
-    main.appendChild(pl);
-  }
-
-  if(toplam===0){
-    const bos=el('div','bos');
-    bos.innerHTML='<div class="bos-icon">📊</div><div class="bos-txt">Önce plan sekmesinden aktivite ekle.</div>';
-    main.appendChild(bos);
-    return;
-  }
-
-  // Kategori dağılımı
-  const toplamDk=state.bloklar.reduce((a,b)=>a+Math.max(0,dkFark(b.baslangic,b.bitis)),0);
-  const katOzet=KATEGORILER.map(k=>{
-    const liste=state.bloklar.filter(b=>b.kategori===k.id);
-    const dk=liste.reduce((a,b)=>a+Math.max(0,dkFark(b.baslangic,b.bitis)),0);
-    return{...k,adet:liste.length,dk};
-  }).filter(k=>k.adet>0);
-
-  if(katOzet.length>0){
-    const st=el('div','section-title'); st.textContent='KATEGORİ DAĞILIMI';
-    main.appendChild(st);
-    katOzet.forEach(k=>{
-      const row=el('div','kat-row');
-      const emo=el('span'); emo.style.cssText='font-size:16px;width:20px'; emo.textContent=k.emoji;
-      const bw=el('div','kat-bar-wrap');
-      const bt=el('div','kat-bar-top');
-      bt.innerHTML=`<span style="font-size:13px;color:#e2e8f0">${k.label}</span><span style="font-size:12px;color:#94a3b8">${k.adet} blok · ${Math.floor(k.dk/60)}s${k.dk%60}dk</span>`;
-      const b=el('div','kat-bar');
-      const bf=el('div','kat-bar-fill');
-      bf.style.cssText='width:'+(toplamDk>0?Math.round(k.dk/toplamDk*100):0)+'%;background:'+k.renk;
-      b.appendChild(bf); bw.append(bt,b); row.append(emo,bw); main.appendChild(row);
-    });
-  }
-
-  // Liste
-  const st2=el('div','section-title'); st2.style.marginTop='16px'; st2.textContent='TÜM AKTİVİTELER';
-  main.appendChild(st2);
-  state.bloklar.forEach(b=>{
-    const row=el('div','rapor-liste-row');
-    const ikon=el('span'); ikon.style.cssText='font-size:16px;width:20px;text-align:center';
-    ikon.textContent=b.tamamlandi===true?'✅':b.tamamlandi===false?'❌':'⬜';
-    const saat=el('span'); saat.style.cssText='font-size:13px;color:#94a3b8;min-width:95px';
-    saat.textContent=b.baslangic+' – '+b.bitis;
-    const isim=el('span'); isim.style.cssText='flex:1;font-size:14px;color:'+(b.tamamlandi===false?'#64748b':'#e2e8f0');
-    if(b.tamamlandi===false) isim.style.textDecoration='line-through';
-    isim.textContent=katEmoji(b.kategori)+' '+b.baslik;
-    const sure=el('span'); sure.style.cssText='font-size:12px;color:'+katRenk(b.kategori);
-    sure.textContent=sureFmt(b.baslangic,b.bitis);
-    row.append(ikon,saat,isim,sure); main.appendChild(row);
-  });
-
-  const gBtn=el('button','rapor-gonder');
-  gBtn.textContent=state.giris?'📧 Günlük Raporu Gmail\'e Gönder':'Önce Google Hesabına Giriş Yap';
-  gBtn.disabled=!state.giris;
-  gBtn.onclick=raporGonder;
-  main.appendChild(gBtn);
-
-  // Haftalık rapor butonları
-  const haftaBaslik=el('div','section-title'); haftaBaslik.style.marginTop='20px'; haftaBaslik.textContent='HAFTALIK / AYLIK RAPOR';
-  main.appendChild(haftaBaslik);
-  const btnGrid=el('div'); btnGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px';
-  const indir=el('button','iptal-btn'); indir.textContent='⬇️ HTML İndir'; indir.onclick=haftalikRaporIndir;
-  const gndr=el('button','kaydet-btn');
-  gndr.textContent=state.giris?'📧 Haftalık Mail':'Giriş Yap';
-  gndr.disabled=!state.giris; gndr.onclick=haftalikRaporGonder;
-  btnGrid.append(indir,gndr); main.appendChild(btnGrid);
-}
-
-function renderSablonlar(main){
-  if(state.sablonlar.length===0){
-    const bos=el('div','bos');
-    bos.innerHTML='<div class="bos-icon">📁</div><div class="bos-txt">Henüz şablon yok.<br>Plan sekmesinde "💾 Şablon Kaydet" butonu ile kaydet.</div>';
-    main.appendChild(bos);
-    return;
-  }
-  state.sablonlar.forEach(s=>{
-    const kart=el('div','sablon-kart');
-    const ust=el('div','sablon-kart-ust');
-    const sol=el('div');
-    const isim=el('div','sablon-isim'); isim.textContent=s.isim;
-    const meta=el('div','sablon-meta'); meta.textContent=s.tarih+' · '+s.bloklar.length+' aktivite';
-    const prev=el('div','sablon-preview');
-    prev.textContent=s.bloklar.slice(0,3).map(b=>katEmoji(b.kategori)+' '+b.baslik).join(' · ')+(s.bloklar.length>3?' +daha':'');
-    sol.append(isim,meta,prev);
-    const sag=el('div'); sag.style.cssText='display:flex;gap:6px;align-items:flex-start';
-    const uygula=el('button','sablon-uygula'); uygula.textContent='▶ Uygula';
-    uygula.onclick=()=>sablonUygula(s);
-    const sil=el('button','mini-btn'); sil.textContent='🗑️'; sil.style.color='#ef4444';
-    sil.onclick=()=>sablonSil(s.id);
-    sag.append(uygula,sil);
-    ust.append(sol,sag); kart.appendChild(ust); main.appendChild(kart);
+function formatDateTR(date) {
+  return new Date(`${date}T12:00:00+03:00`).toLocaleDateString("tr-TR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
   });
 }
 
-function renderAyarlar(main){
-  // Google Takvim bağlantısı
-  const baglantiKart=el('div');
-  baglantiKart.style.cssText='background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px';
-  const bagBaslik=el('div');
-  bagBaslik.style.cssText='font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:12px';
-  bagBaslik.textContent='📅 Google Takvim & Gmail Bağlantısı';
-  baglantiKart.appendChild(bagBaslik);
-
-  if(state.gapiHazir && state.giris){
-    const bagliDiv=el('div');
-    bagliDiv.style.cssText='display:flex;align-items:center;justify-content:space-between';
-    const bagliTxt=el('div');
-    bagliTxt.style.cssText='color:#22c55e;font-size:13px';
-    bagliTxt.textContent='✅ Google hesabı bağlı';
-    const cikisBtn=el('button');
-    cikisBtn.style.cssText='background:#334155;border:none;color:#94a3b8;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer';
-    cikisBtn.textContent='Bağlantıyı Kes';
-    cikisBtn.onclick=googleCikis;
-    bagliDiv.append(bagliTxt,cikisBtn);
-    baglantiKart.appendChild(bagliDiv);
-  } else if(state.gapiHazir){
-    const baglanBtn=el('button');
-    baglanBtn.style.cssText='width:100%;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border:none;color:white;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer';
-    baglanBtn.textContent='🔗 Google Hesabına Bağlan';
-    baglanBtn.onclick=googleGiris;
-    baglantiKart.appendChild(baglanBtn);
-  } else if(state.ayarlar.clientId){
-    const yukDiv=el('div');
-    yukDiv.style.cssText='color:#94a3b8;font-size:13px;text-align:center;padding:8px';
-    yukDiv.textContent='⏳ Google API yükleniyor...';
-    baglantiKart.appendChild(yukDiv);
-  } else {
-    const bilgiDiv=el('div');
-    bilgiDiv.style.cssText='color:#64748b;font-size:12px';
-    bilgiDiv.textContent='Client ID ve API Key girdikten sonra bağlan butonu çıkacak.';
-    baglantiKart.appendChild(bilgiDiv);
-  }
-  main.appendChild(baglantiKart);
-  const bilgi=el('div','ayar-bilgi');
-  bilgi.innerHTML='<strong style="color:#60a5fa">📌 Google API Kurulumu</strong><br><br>'+
-    '1. <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a>\'a git<br>'+
-    '2. Calendar API + Gmail API\'yi etkinleştir<br>'+
-    '3. OAuth 2.0 Client ID oluştur (Web app)<br>'+
-    '4. Authorized origins\'e bu sitenin URL\'ini ekle<br>'+
-    '5. API Key oluştur';
-  main.appendChild(bilgi);
-
-  [
-    ['clientId','Google Client ID','xxxx.apps.googleusercontent.com','text'],
-    ['apiKey','Google API Key','AIzaSy...','text'],
-    ['email','Rapor E-posta Adresi','sen@gmail.com','email'],
-    ['geminiKey','Gemini API Key (artık kullanılmıyor)','AIzaSy...','text'],
-    ['openaiKey','OpenAI API Key (Kitap Notu için)','sk-...','text'],
-  ].forEach(([key,label,ph,type])=>{
-    const g=el('div','ayar-grup');
-    const lbl=el('label','label'); lbl.textContent=label;
-    const inp=document.createElement('input');
-    inp.type=type; inp.value=state.ayarlar[key]; inp.placeholder=ph; inp.className='input';
-    inp.onchange=e=>{
-      state.ayarlar[key]=e.target.value;
-      kaydet('ayarlar',state.ayarlar);
-      fbAyarKaydet(state.ayarlar);
-      if(key==='clientId'||key==='apiKey') gapiBaslat();
-    };
-    g.append(lbl,inp); main.appendChild(g);
-  });
-
-  const not=el('div','ayar-not');
-  not.textContent='⚠️ Bilgiler cihazında yerel olarak saklanır. Sayfayı yeniledikten sonra "G Bağlan" butonuna basarak giriş yap.';
-  main.appendChild(not);
+function encodeBase64UrlUnicode(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function renderModal(app){
-  const blok=state.modal.veri;
-  const ov=el('div','overlay');
-  ov.onclick=e=>{if(e.target===ov){state.modal=null;render();}};
-  const modal=el('div','modal');
-
-  const header=el('div','modal-header');
-  const title=el('div','modal-title'); title.textContent=blok.baslik?'Bloğu Düzenle':'Yeni Blok';
-  const kapat=el('button','modal-kapat'); kapat.textContent='✕';
-  kapat.onclick=()=>{state.modal=null;render();};
-  header.append(title,kapat); modal.appendChild(header);
-
-  // Başlık
-  const rBaslik=el('div','form-row');
-  const lBaslik=el('label','label'); lBaslik.textContent='Başlık';
-  const iBaslik=document.createElement('input');
-  iBaslik.type='text'; iBaslik.value=blok.baslik; iBaslik.placeholder='Sabah yürüyüşü...'; iBaslik.className='input';
-  iBaslik.oninput=e=>{ state.modal.veri.baslik=e.target.value; };
-  rBaslik.append(lBaslik,iBaslik); modal.appendChild(rBaslik);
-
-  // Saat
-  const tg=el('div','time-grid');
-  ['baslangic','bitis'].forEach((k,i)=>{
-    const g=el('div');
-    const l=el('label','label'); l.textContent=i===0?'Başlangıç':'Bitiş';
-    const inp=document.createElement('input');
-    inp.type='time'; inp.value=blok[k]; inp.className='input';
-    inp.onchange=e=>{ state.modal.veri[k]=e.target.value; renderModalSure(); };
-    g.append(l,inp); tg.appendChild(g);
-  });
-  modal.appendChild(tg);
-
-  // Süre preview
-  const sureEl=el('div','sure-preview');
-  sureEl.id='sure-preview';
-  const dk=dkFark(blok.baslangic,blok.bitis);
-  if(dk>0) sureEl.innerHTML='Süre: <strong style="color:'+katRenk(blok.kategori)+'">'+sureFmt(blok.baslangic,blok.bitis)+'</strong>';
-  modal.appendChild(sureEl);
-
-  // Kategori
-  const rKat=el('div','form-row');
-  const lKat=el('label','label'); lKat.textContent='Kategori';
-  const ks=el('div','kat-secim');
-  KATEGORILER.forEach(k=>{
-    const chip=el('button','kat-chip');
-    chip.textContent=k.emoji+' '+k.label;
-    if(blok.kategori===k.id){ chip.style.borderColor=k.renk; chip.style.color=k.renk; chip.style.background=k.renk+'22'; }
-    chip.onclick=()=>{state.modal.veri.kategori=k.id;render();};
-    ks.appendChild(chip);
-  });
-  rKat.append(lKat,ks); modal.appendChild(rKat);
-
-  // Not
-  const rNot=el('div','form-row');
-  const lNot=el('label','label'); lNot.textContent='Not (isteğe bağlı)';
-  const taNot=document.createElement('textarea');
-  taNot.value=blok.not; taNot.placeholder='Eklemek istediğin notlar...'; taNot.className='input'; taNot.rows=2;
-  taNot.oninput=e=>{ state.modal.veri.not=e.target.value; };
-  rNot.append(lNot,taNot); modal.appendChild(rNot);
-
-  // Footer
-  const footer=el('div','modal-footer');
-  const iptal=el('button','iptal-btn'); iptal.textContent='İptal';
-  iptal.onclick=()=>{state.modal=null;render();};
-  const kaydetBtn=el('button','kaydet-btn');
-  kaydetBtn.textContent=state.yukleniyor?'Ekleniyor...':'Kaydet & Calendar\'a Ekle';
-  kaydetBtn.disabled=!blok.baslik||state.yukleniyor;
-  kaydetBtn.onclick=()=>{ if(blok.baslik) blokKaydet(state.modal.veri); };
-  footer.append(iptal,kaydetBtn); modal.appendChild(footer);
-
-  ov.appendChild(modal); app.appendChild(ov);
-}
-
-function renderModalSure(){
-  const el2=document.getElementById('sure-preview');
-  if(!el2)return;
-  const v=state.modal?.veri;
-  if(!v)return;
-  const dk=dkFark(v.baslangic,v.bitis);
-  el2.innerHTML=dk>0?'Süre: <strong style="color:'+katRenk(v.kategori)+'">'+sureFmt(v.baslangic,v.bitis)+'</strong>':'';
-}
-
-// ── Google Sheets & Docs ──────────────────────────────────────────────────────
-async function driveFetch(method, url, body){
-  const res = await fetch(url, {
-    method,
-    headers: {
-      'Authorization': 'Bearer '+state.accessToken,
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||res.statusText); }
-  return res.json();
-}
-
-async function sheetGetOrCreate(){
-  if(state.sheetId) return state.sheetId;
-  // Yeni spreadsheet oluştur
-  const res = await driveFetch('POST','https://sheets.googleapis.com/v4/spreadsheets',{
-    properties:{ title:'Günüm — Ürün Keşif Listesi' },
-    sheets:[{
-      properties:{ title:'Ürünler' },
-      data:[{ rowData:[{ values:[
-        {userEnteredValue:{stringValue:'Tarih'}},
-        {userEnteredValue:{stringValue:'Ürün Adı'}},
-        {userEnteredValue:{stringValue:'Video Linki'}},
-        {userEnteredValue:{stringValue:'Sosyal Medya'}},
-        {userEnteredValue:{stringValue:'Not'}},
-      ]}]}]
-    }]
-  });
-  state.sheetId = res.spreadsheetId;
-  kaydet('sheet_id', state.sheetId);
-  return state.sheetId;
-}
-
-async function urunSheetsEkle(urun){
-  if(!state.giris||!state.accessToken){ bildirimGoster('Google hesabına giriş yap','uyari'); return; }
-  yukleniyor(true);
-  try{
-    const id = await sheetGetOrCreate();
-    await driveFetch('POST',
-      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Ürünler!A:E:append?valueInputOption=RAW`,
-      { values:[[urun.tarih, urun.ad, urun.videoLink||'', urun.sosyalLink||'', urun.not||'']] }
-    );
-    bildirimGoster('Sheets\'e eklendi ✓ 📊');
-    // Sheets linkini kaydet
-    kaydet('sheet_url', `https://docs.google.com/spreadsheets/d/${id}`);
-    state.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}`;
-  }catch(e){ bildirimGoster('Sheets hatası: '+e.message,'hata'); }
-  yukleniyor(false);
-}
-
-async function docGetOrCreate(){
-  if(state.docId) return state.docId;
-  const res = await driveFetch('POST','https://docs.googleapis.com/v1/documents',{
-    title:'Günüm — Kitap Notlarım'
-  });
-  state.docId = res.documentId;
-  kaydet('doc_id', state.docId);
-  return state.docId;
-}
-
-async function notDocsEkle(not){
-  if(!state.giris||!state.accessToken){ bildirimGoster('Google hesabına giriş yap','uyari'); return; }
-  yukleniyor(true);
-  try{
-    const id = await docGetOrCreate();
-    // Belgenin sonuna not ekle
-    const doc = await driveFetch('GET',`https://docs.googleapis.com/v1/documents/${id}`);
-    const endIndex = doc.body.content[doc.body.content.length-1].endIndex - 1;
-    
-    await driveFetch('POST',`https://docs.googleapis.com/v1/documents/${id}:batchUpdate`,{
-      requests:[
-        { insertText:{ location:{index:endIndex}, text:`\n\n${not.baslik}\n${not.tarih}${not.kitap?' | 📚 '+not.kitap:''}\n\n${not.ozet}\n\n---` } },
-        { updateParagraphStyle:{
-          range:{startIndex:endIndex+2, endIndex:endIndex+2+not.baslik.length},
-          paragraphStyle:{namedStyleType:'HEADING_2'},
-          fields:'namedStyleType'
-        }}
-      ]
-    });
-    bildirimGoster('Docs\'a eklendi ✓ 📄');
-    state.docUrl = `https://docs.google.com/document/d/${id}`;
-    kaydet('doc_url', state.docUrl);
-  }catch(e){ bildirimGoster('Docs hatası: '+e.message,'hata'); }
-  yukleniyor(false);
-}
-
-async function planSheetsEkle(){
-  if(!state.giris||!state.accessToken){ bildirimGoster('Google hesabına giriş yap','uyari'); return; }
-  if(state.bloklar.length===0){ bildirimGoster('Önce plan ekle','uyari'); return; }
-  yukleniyor(true);
-  try{
-    const id = await sheetGetOrCreate();
-    // Plan sekmesi var mı kontrol et, yoksa ekle
-    const ss = await driveFetch('GET',`https://sheets.googleapis.com/v4/spreadsheets/${id}`);
-    const planSheet = ss.sheets.find(s=>s.properties.title==='Günlük Plan');
-    if(!planSheet){
-      await driveFetch('POST',`https://sheets.googleapis.com/v4/spreadsheets/${id}:batchUpdate`,{
-        requests:[{ addSheet:{ properties:{title:'Günlük Plan'} } }]
-      });
-      // Başlık satırı ekle
-      await driveFetch('POST',
-        `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Günlük Plan!A:F:append?valueInputOption=RAW`,
-        { values:[['Tarih','Başlangıç','Bitiş','Aktivite','Kategori','Durum']] }
-      );
-    }
-    const satirlar = state.bloklar.map(b=>([
-      state.tarih, b.baslangic, b.bitis, b.baslik,
-      KATEGORILER.find(k=>k.id===b.kategori)?.label||b.kategori,
-      b.tamamlandi===true?'✅ Tamamlandı':b.tamamlandi===false?'❌ Kaçırıldı':'⬜ Belirsiz'
-    ]));
-    await driveFetch('POST',
-      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/Günlük Plan!A:F:append?valueInputOption=RAW`,
-      { values: satirlar }
-    );
-    bildirimGoster('Plan Sheets\'e kaydedildi ✓ 📊');
-    state.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}`;
-    kaydet('sheet_url', state.sheetUrl);
-  }catch(e){ bildirimGoster('Sheets hatası: '+e.message,'hata'); }
-  yukleniyor(false);
-}
-
-
-async function gorseldenNotOlustur(dosya){
-  if(!state.ayarlar.openaiKey){ bildirimGoster('Ayarlardan OpenAI API Key gir','hata'); return null; }
-  return new Promise((resolve)=>{
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = async(e)=>{
-      const base64 = e.target.result;
-      yukleniyor(true);
-      try{
-        const res = await fetch('https://api.openai.com/v1/chat/completions',{
-          method:'POST',
-          headers:{
-            'Content-Type':'application/json',
-            'Authorization': 'Bearer '+state.ayarlar.openaiKey,
-          },
-          body: JSON.stringify({
-            model:'gpt-4o-mini',
-            max_tokens:1024,
-            messages:[{
-              role:'user',
-              content:[
-                {type:'image_url', image_url:{url: base64}},
-                {type:'text', text:'Bu görseldeki metni veya içeriği Türkçe olarak özetle. Önemli noktaları madde madde yaz. Başlık, ana fikirler ve önemli alıntılar şeklinde organize et.'}
-              ]
-            }]
-          })
-        });
-        const data = await res.json();
-        const ozet = data.choices?.[0]?.message?.content || 'Özet oluşturulamadı';
-        yukleniyor(false);
-        resolve(ozet);
-      }catch(e){
-        yukleniyor(false);
-        bildirimGoster('AI hatası: '+e.message,'hata');
-        resolve(null);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function hasOverlap(blocks, candidate) {
+  const start = toMinutes(candidate.start);
+  const end = toMinutes(candidate.end);
+  return blocks.some((b) => {
+    if (b.id === candidate.id) return false;
+    const bs = toMinutes(b.start);
+    const be = toMinutes(b.end);
+    return start < be && end > bs;
+  });
+}
+
+async function apiFetch(url, accessToken, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!response.ok) {
+    const message = data?.error?.message || response.statusText || "Google API hatası";
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+function useGoogleIdentity(clientId, notify) {
+  const [ready, setReady] = useState(false);
+  const [accessToken, setAccessToken] = useState("");
+  const [tokenClient, setTokenClient] = useState(null);
+
+  useEffect(() => {
+    if (!clientId) {
+      setReady(false);
+      setAccessToken("");
+      setTokenClient(null);
+      return;
+    }
+
+    const existing = document.querySelector("script[data-google-identity]");
+
+    function init() {
+      if (!window.google?.accounts?.oauth2) return;
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPES,
+        callback: (response) => {
+          if (response?.access_token) {
+            setAccessToken(response.access_token);
+            notify("Google hesabına bağlandı ✓", "success");
+          } else {
+            notify("Google bağlantısı tamamlanamadı", "warning");
+          }
+        },
+      });
+      setTokenClient(client);
+      setReady(true);
+    }
+
+    if (existing) {
+      init();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleIdentity = "true";
+    script.onload = init;
+    script.onerror = () => notify("Google Identity script yüklenemedi", "error");
+    document.body.appendChild(script);
+  }, [clientId, notify]);
+
+  function signIn() {
+    if (!clientId) return notify("Önce Ayarlar bölümünden Google Client ID gir", "warning");
+    if (window.location.origin.includes("web-sandbox.oaiusercontent.com")) {
+      return notify("Google girişi ChatGPT önizleme alanında çalışmaz. Uygulamayı GitHub Pages linkinden aç.", "warning");
+    }
+    if (!ready || !tokenClient) return notify("Google bağlantısı henüz hazır değil", "warning");
+    tokenClient.requestAccessToken({ prompt: accessToken ? "" : "consent" });
+  }
+
+  function signOut() {
+    if (accessToken && window.google?.accounts?.oauth2) window.google.accounts.oauth2.revoke(accessToken);
+    setAccessToken("");
+    notify("Google bağlantısı kesildi", "success");
+  }
+
+  return { ready, connected: Boolean(accessToken), accessToken, signIn, signOut };
+}
+
+async function analyzeNoteWithAI({ apiKey, model, text, imageFile }) {
+  if (!apiKey) throw new Error("OpenAI API Key eksik");
+
+  const content = [
+    {
+      type: "text",
+      text:
+        "Türkçe yanıt ver. Gönderilen kitap sayfası, metin, söz veya alıntıyı incele. Önce varsa görseldeki/metindeki yazıyı çıkar. Sonra kısa özet, ana fikir, akılda kalan cümleler ve kişisel not önerisi üret. Sonucu JSON gibi değil, düzenli başlıklarla ver.",
+    },
+  ];
+
+  if (text?.trim()) content.push({ type: "text", text: `Kullanıcının eklediği metin:
+${text}` });
+  if (imageFile) {
+    const dataUrl = await fileToBase64(imageFile);
+    content.push({ type: "image_url", image_url: { url: dataUrl } });
+  }
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: model || "gpt-4o-mini",
+      messages: [{ role: "user", content }],
+      temperature: 0.35,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error?.message || "AI analiz hatası");
+  return data.choices?.[0]?.message?.content || "Analiz alınamadı.";
+}
+
+async function createGoogleDoc({ accessToken, title, content }) {
+  const doc = await apiFetch("https://docs.googleapis.com/v1/documents", accessToken, {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+
+  await apiFetch(`https://docs.googleapis.com/v1/documents/${doc.documentId}:batchUpdate`, accessToken, {
+    method: "POST",
+    body: JSON.stringify({
+      requests: [{ insertText: { location: { index: 1 }, text: content } }],
+    }),
+  });
+
+  return doc;
+}
+
+async function createProductSpreadsheet(accessToken) {
+  const sheet = await apiFetch("https://sheets.googleapis.com/v4/spreadsheets", accessToken, {
+    method: "POST",
+    body: JSON.stringify({
+      properties: { title: "Günüm Ürün Burner" },
+      sheets: [{ properties: { title: "Ürünler" } }],
+    }),
+  });
+
+  await appendProductToSheet({
+    accessToken,
+    spreadsheetId: sheet.spreadsheetId,
+    product: {
+      createdAt: "Tarih",
+      name: "Ürün Adı",
+      socialUrl: "Sosyal Medya Linki",
+      productUrl: "Ürün / Tedarik Linki",
+      marketplace: "Pazaryeri",
+      viralScore: "Viral Puanı",
+      potential: "Potansiyel",
+      notes: "Not",
+    },
+    headerMode: true,
+  });
+
+  return sheet.spreadsheetId;
+}
+
+async function appendProductToSheet({ accessToken, spreadsheetId, product, headerMode = false }) {
+  const values = [[
+    product.createdAt,
+    product.name,
+    product.socialUrl,
+    product.productUrl,
+    product.marketplace,
+    product.viralScore,
+    product.potential,
+    product.notes,
+  ]];
+
+  return apiFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Ürünler!A:H:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    accessToken,
+    { method: "POST", body: JSON.stringify({ values }) }
+  );
+}
+
+async function createPlanSpreadsheet(accessToken) {
+  const sheet = await apiFetch("https://sheets.googleapis.com/v4/spreadsheets", accessToken, {
+    method: "POST",
+    body: JSON.stringify({
+      properties: { title: "Günüm Günlük Plan Takibi" },
+      sheets: [{ properties: { title: "Günlük Plan" } }],
+    }),
+  });
+
+  await appendPlanBlockToSheet({
+    accessToken,
+    spreadsheetId: sheet.spreadsheetId,
+    date: "Tarih",
+    block: {
+      title: "Aktivite",
+      start: "Başlangıç",
+      end: "Bitiş",
+      category: "Kategori",
+      note: "Not",
+      status: "Durum",
+      calendarEventId: "Calendar Event ID",
+    },
+    headerMode: true,
+  });
+
+  return sheet.spreadsheetId;
+}
+
+async function appendPlanBlockToSheet({ accessToken, spreadsheetId, date, block, headerMode = false }) {
+  const cat = headerMode ? { label: block.category } : categoryById(block.category);
+  const values = [[
+    date,
+    block.start,
+    block.end,
+    durationText(block.start, block.end),
+    block.title,
+    cat.label,
+    block.note || "",
+    block.status === true ? "Tamamlandı" : block.status === false ? "Kaçırıldı" : "Bekliyor",
+    block.calendarEventId || "",
+    nowTR(),
+  ]];
+
+  return apiFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Günlük Plan!A:J:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    accessToken,
+    { method: "POST", body: JSON.stringify({ values }) }
+  );
+}
+
+export default function App() {
+  const [screen, setScreen] = useState("plan");
+  const [date, setDate] = useState(todayISO());
+  const [blocks, setBlocks] = useState(() => storageGet(`plan_${todayISO()}`, []));
+  const [notes, setNotes] = useState(() => storageGet("notes", []));
+  const [products, setProducts] = useState(() => storageGet("products", []));
+  const [customTemplates, setCustomTemplates] = useState(() => storageGet("customTemplates", []));
+  const [defaultTemplateId, setDefaultTemplateId] = useState(() => storageGet("defaultTemplateId", "standart-gun"));
+  const [settings, setSettings] = useState(() => storageGet("settings", { clientId: "", email: "", openAiKey: "", aiModel: "gpt-4o-mini", productSheetId: "", planSheetId: "", autoApplyDefaultPlan: false, autoSavePlanToSheet: true }));
+  const [modalBlock, setModalBlock] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [reportView, setReportView] = useState("overview");
+
+  function notify(message, type = "success") {
+    setToast({ message, type });
+    window.clearTimeout(window.__gunumToastTimer);
+    window.__gunumToastTimer = window.setTimeout(() => setToast(null), 3200);
+  }
+
+  const google = useGoogleIdentity(settings.clientId, notify);
+
+  useEffect(() => {
+    const saved = storageGet(`plan_${date}`, []);
+    if (saved.length === 0 && settings.autoApplyDefaultPlan) {
+      const allTemplates = [...READY_TEMPLATES, ...customTemplates];
+      const selected = allTemplates.find((t) => t.id === defaultTemplateId) || READY_TEMPLATES[0];
+      setBlocks(hydrateTemplateBlocks(selected.blocks));
+      return;
+    }
+    setBlocks(saved);
+  }, [date, settings.autoApplyDefaultPlan, customTemplates, defaultTemplateId]);
+  useEffect(() => storageSet(`plan_${date}`, blocks), [blocks, date]);
+  useEffect(() => storageSet("notes", notes), [notes]);
+  useEffect(() => storageSet("products", products), [products]);
+  useEffect(() => storageSet("customTemplates", customTemplates), [customTemplates]);
+  useEffect(() => storageSet("defaultTemplateId", defaultTemplateId), [defaultTemplateId]);
+  useEffect(() => storageSet("settings", settings), [settings]);
+
+  const report = useMemo(() => {
+    const completed = blocks.filter((b) => b.status === true).length;
+    const missed = blocks.filter((b) => b.status === false).length;
+    const total = blocks.length;
+    const score = total ? Math.round((completed / total) * 100) : 0;
+    const totalMinutes = blocks.reduce((sum, b) => sum + Math.max(0, minutesDiff(b.start, b.end)), 0);
+    return { completed, missed, total, score, totalMinutes, notes: notes.length, products: products.length };
+  }, [blocks, notes, products]);
+
+  function previousDay() {
+    const d = new Date(`${date}T12:00:00+03:00`);
+    d.setDate(d.getDate() - 1);
+    setDate(d.toISOString().slice(0, 10));
+  }
+
+  function nextDay() {
+    const d = new Date(`${date}T12:00:00+03:00`);
+    d.setDate(d.getDate() + 1);
+    setDate(d.toISOString().slice(0, 10));
+  }
+
+  function openNewBlock() {
+    const last = [...blocks].sort((a, b) => a.end.localeCompare(b.end)).at(-1);
+    const start = last?.end || "08:00";
+    const endMinutes = Math.min(toMinutes(start) + 60, 23 * 60 + 59);
+    const end = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
+    setModalBlock({ ...EMPTY_BLOCK, id: uid(), start, end });
+  }
+
+  function applyTemplate(templateId = defaultTemplateId) {
+    const allTemplates = [...READY_TEMPLATES, ...customTemplates];
+    const selected = allTemplates.find((t) => t.id === templateId) || READY_TEMPLATES[0];
+    setBlocks(hydrateTemplateBlocks(selected.blocks));
+    setDefaultTemplateId(selected.id);
+    notify(`“${selected.name}” şablonu bugüne uygulandı ✓`, "success");
+  }
+
+  function saveTodayAsTemplate() {
+    if (!blocks.length) return notify("Şablon kaydetmek için önce aktivite ekle", "warning");
+    const name = window.prompt("Şablon adı:", "Benim Standart Günüm");
+    if (!name) return;
+    const template = {
+      id: uid(),
+      name: name.trim(),
+      createdAt: nowTR(),
+      blocks: blocks.map(({ id, status, calendarEventId, ...b }) => ({ ...b })),
+    };
+    setCustomTemplates((prev) => [template, ...prev]);
+    setDefaultTemplateId(template.id);
+    notify("Şablon kaydedildi ve varsayılan yapıldı ✓", "success");
+  }
+
+  function toggleAutoDefaultPlan() {
+    setSettings((prev) => ({ ...prev, autoApplyDefaultPlan: !prev.autoApplyDefaultPlan }));
+    notify(!settings.autoApplyDefaultPlan ? "Boş günlere otomatik şablon açıldı ✓" : "Otomatik şablon kapatıldı", "success");
+  }
+
+  async function saveBlock(block) {
+    const normalized = { ...block, title: block.title.trim(), note: block.note.trim() };
+    if (!normalized.title) return notify("Başlık boş olamaz", "warning");
+    if (minutesDiff(normalized.start, normalized.end) <= 0) return notify("Bitiş saati başlangıçtan sonra olmalı", "warning");
+    if (hasOverlap(blocks, normalized)) return notify("Bu saat aralığında başka bir blok var", "warning");
+
+    let savedBlock = normalized;
+    if (google.connected) {
+      setLoading(true);
+      try {
+        const cat = categoryById(normalized.category);
+        const eventBody = {
+          summary: `${cat.emoji} ${normalized.title}`,
+          description: normalized.note || "Günüm uygulamasından eklendi",
+          start: { dateTime: dateTimeForGoogle(date, normalized.start), timeZone: "Europe/Istanbul" },
+          end: { dateTime: dateTimeForGoogle(date, normalized.end), timeZone: "Europe/Istanbul" },
+          colorId: cat.googleColorId,
+        };
+        if (normalized.calendarEventId) {
+          await apiFetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${normalized.calendarEventId}`, google.accessToken, { method: "PUT", body: JSON.stringify(eventBody) });
+          notify("Google Calendar etkinliği güncellendi ✓", "success");
+        } else {
+          const created = await apiFetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", google.accessToken, { method: "POST", body: JSON.stringify(eventBody) });
+          savedBlock = { ...normalized, calendarEventId: created.id };
+          notify("Google Calendar'a eklendi ✓", "success");
+        }
+
+        if (settings.autoSavePlanToSheet && settings.planSheetId) {
+          await appendPlanBlockToSheet({
+            accessToken: google.accessToken,
+            spreadsheetId: settings.planSheetId,
+            date,
+            block: savedBlock,
+          });
+          notify("Calendar + Plan Sheet kaydı tamamlandı ✓", "success");
+        }
+      } catch (error) {
+        notify(`Calendar hatası: ${error.message}`, "error");
+      } finally {
+        setLoading(false);
       }
-    };
-    reader.readAsDataURL(dosya);
-  });
-}
-
-function wordIndir(notlar){
-  // Basit RTF formatı - Word ile açılır
-  let icerik = '{\\rtf1\\ansi\\deff0\n';
-  icerik += '{\\fonttbl{\\f0 Times New Roman;}}\n';
-  icerik += '{\\colortbl;\\red0\\green0\\blue0;\\red59\\green130\\blue246;}\n';
-  icerik += '\\f0\\fs24\n';
-  icerik += '{\\b\\fs32\\cf2 Kitap Notlar\\u305?m}\\par\\par\n';
-  notlar.forEach(n=>{
-    icerik += `{\\b\\fs26 ${escRtf(n.baslik)}}\\par\n`;
-    icerik += `{\\i\\cf2 ${escRtf(n.tarih)} | ${escRtf(n.kitap||'')} }\\par\\par\n`;
-    icerik += `${escRtf(n.ozet)}\\par\\par\n`;
-    icerik += '{\\pard\\brdrb\\brdrs\\brdrw10\\brsp20 \\par}\\par\n';
-  });
-  icerik += '}';
-  const blob = new Blob([icerik],{type:'application/rtf'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'kitap-notlarim.rtf';
-  a.click();
-  bildirimGoster('Word dosyası indirildi ✓');
-}
-
-function escRtf(s){
-  if(!s)return'';
-  return s.replace(/\\/g,'\\\\').replace(/[{}]/g,'\\$&')
-    .replace(/[^\x00-\x7F]/g, c=>'\\u'+c.charCodeAt(0)+'?');
-}
-
-function renderNotlar(main){
-  // Başlık + ekle butonu
-  const ust=el('div'); ust.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
-  const baslik=el('div'); baslik.style.cssText='color:#94a3b8;font-size:13px';
-  baslik.textContent=state.notlar.length+' not';
-  const btnGrp=el('div'); btnGrp.style.cssText='display:flex;gap:8px';
-
-  if(state.notlar.length>0){
-    const wordBtn=el('button','sablon-btn');
-    wordBtn.textContent='📄 Word İndir';
-    wordBtn.onclick=()=>wordIndir(state.notlar);
-    btnGrp.appendChild(wordBtn);
-
-    const docsBtn=el('button','sablon-btn');
-    docsBtn.style.cssText='background:#1a73e8;border:none;color:white;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer';
-    docsBtn.textContent='📝 Docs\'a Aktar';
-    docsBtn.onclick=async()=>{
-      for(const n of state.notlar){ await notDocsEkle(n); }
-      if(state.docUrl){ window.open(state.docUrl,'_blank'); }
-    };
-    btnGrp.appendChild(docsBtn);
-  }
-  ust.append(baslik,btnGrp);
-  main.appendChild(ust);
-
-  // Görsel yükleme alanı
-  const yukleAlan=el('div');
-  yukleAlan.style.cssText='border:2px dashed #334155;border-radius:12px;padding:20px;text-align:center;cursor:pointer;margin-bottom:16px;background:#1e293b';
-  yukleAlan.innerHTML='<div style="font-size:32px">📸</div><div style="color:#94a3b8;font-size:13px;margin-top:8px">Kitap sayfası görselini buraya tıkla veya sürükle</div><div style="color:#64748b;font-size:11px;margin-top:4px">AI otomatik özetleyecek</div>';
-
-  const fileInput=document.createElement('input');
-  fileInput.type='file'; fileInput.accept='image/*'; fileInput.style.display='none';
-  fileInput.onchange=async(e)=>{
-    const dosya=e.target.files[0]; if(!dosya)return;
-    // Kitap adı sor
-    const kitap=prompt('Kitap adı (isteğe bağlı):') || '';
-    const ozet=await gorseldenNotOlustur(dosya);
-    if(ozet){
-      const not={
-        id:uid(), tarih:new Date().toLocaleDateString('tr-TR'),
-        kitap, ozet,
-        baslik: kitap || ('Not '+new Date().toLocaleTimeString('tr-TR')),
-        gorsel: await dosyaBase64(dosya),
-      };
-      state.notlar.unshift(not);
-      kaydet('kitap_notlar',state.notlar);
-      fbKaydet('notlar', not.id, {...not, gorsel: ''});
-      render();
-      bildirimGoster('Not kaydedildi ✓');
     }
-    fileInput.value='';
-  };
-  yukleAlan.appendChild(fileInput);
-  yukleAlan.onclick=()=>fileInput.click();
-  yukleAlan.ondragover=e=>{e.preventDefault();yukleAlan.style.borderColor='#3b82f6';};
-  yukleAlan.ondragleave=()=>{yukleAlan.style.borderColor='#334155';};
-  yukleAlan.ondrop=async(e)=>{
-    e.preventDefault(); yukleAlan.style.borderColor='#334155';
-    const dosya=e.dataTransfer.files[0]; if(!dosya)return;
-    const kitap=prompt('Kitap adı:') || '';
-    const ozet=await gorseldenNotOlustur(dosya);
-    if(ozet){
-      const not={id:uid(),tarih:new Date().toLocaleDateString('tr-TR'),kitap,ozet,baslik:kitap||'Not',gorsel:await dosyaBase64(dosya)};
-      state.notlar.unshift(not);
-      kaydet('kitap_notlar',state.notlar);
-      render();
-    }
-  };
-  main.appendChild(yukleAlan);
 
-  if(state.notlar.length===0){
-    const bos=el('div','bos');
-    bos.innerHTML='<div class="bos-icon">📚</div><div class="bos-txt">Henüz not yok.<br>Bir kitap sayfasının fotoğrafını yükle.</div>';
-    main.appendChild(bos); return;
-  }
-
-  state.notlar.forEach(n=>{
-    const kart=el('div'); kart.style.cssText='background:#1e293b;border-radius:12px;padding:14px;margin-bottom:12px;border-left:3px solid #f59e0b';
-    const ust2=el('div'); ust2.style.cssText='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px';
-    const sol=el('div');
-    const baslikEl=el('div'); baslikEl.style.cssText='font-weight:600;font-size:15px;color:#e2e8f0'; baslikEl.textContent=n.baslik;
-    const meta=el('div'); meta.style.cssText='font-size:12px;color:#64748b;margin-top:2px'; meta.textContent=n.tarih+(n.kitap?' · 📚 '+n.kitap:'');
-    sol.append(baslikEl,meta);
-    const silBtn=el('button','mini-btn'); silBtn.textContent='🗑️'; silBtn.style.color='#ef4444';
-    silBtn.onclick=()=>{ 
-      state.notlar=state.notlar.filter(x=>x.id!==n.id); 
-      kaydet('kitap_notlar',state.notlar); 
-      fbSil('notlar', n.id);
-      render(); 
-    };
-    ust2.append(sol,silBtn); kart.appendChild(ust2);
-
-    if(n.gorsel){
-      const img=document.createElement('img');
-      img.src=n.gorsel; img.style.cssText='width:100%;border-radius:8px;margin-bottom:10px;max-height:150px;object-fit:cover';
-      kart.appendChild(img);
-    }
-    const ozetEl=el('div'); ozetEl.style.cssText='font-size:13px;color:#cbd5e1;line-height:1.7;white-space:pre-wrap'; ozetEl.textContent=n.ozet;
-    kart.appendChild(ozetEl);
-    main.appendChild(kart);
-  });
-}
-
-async function dosyaBase64(dosya){
-  return new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(dosya);});
-}
-
-// ── Ürün Keşif Ekranı ─────────────────────────────────────────────────────────
-function renderUrunler(main){
-  const ust=el('div'); ust.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
-  const bilgi=el('div'); bilgi.style.cssText='color:#94a3b8;font-size:13px'; bilgi.textContent=state.urunler.length+' ürün kaydedildi';
-  const sagGrpU=el('div'); sagGrpU.style.cssText='display:flex;gap:8px';
-  const ekleBtn2=el('button','sablon-btn'); ekleBtn2.textContent='+ Ürün Ekle';
-  ekleBtn2.onclick=()=>{ state.modal={tip:'urun',veri:{id:uid(),ad:'',videoLink:'',sosyalLink:'',not:'',tarih:new Date().toLocaleDateString('tr-TR')}}; render(); };
-  sagGrpU.appendChild(ekleBtn2);
-  if(state.urunler.length>0){
-    const sheetsBtn=el('button');
-    sheetsBtn.style.cssText='background:#0f9d58;border:none;color:white;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer';
-    sheetsBtn.textContent='📊 Sheets\'e Aktar';
-    sheetsBtn.onclick=async()=>{
-      for(const u of state.urunler){ await urunSheetsEkle(u); }
-      if(state.sheetUrl) window.open(state.sheetUrl,'_blank');
-    };
-    sagGrpU.appendChild(sheetsBtn);
-  }
-  ust.append(bilgi,sagGrpU); main.appendChild(ust);
-
-  if(state.urunler.length===0){
-    const bos=el('div','bos');
-    bos.innerHTML='<div class="bos-icon">🛍️</div><div class="bos-txt">Henüz ürün yok.<br>Araştırırken karşılaştığın ürünleri kaydet.</div>';
-    main.appendChild(bos); return;
-  }
-
-  state.urunler.forEach(u=>{
-    const kart=el('div'); kart.style.cssText='background:#1e293b;border-radius:12px;padding:14px;margin-bottom:10px;border-left:3px solid #a78bfa';
-    const ust2=el('div'); ust2.style.cssText='display:flex;justify-content:space-between;align-items:flex-start';
-    const sol=el('div'); sol.style.flex='1';
-    const ad=el('div'); ad.style.cssText='font-weight:600;font-size:15px;color:#e2e8f0;margin-bottom:4px'; ad.textContent='🛍️ '+u.ad;
-    const tarih=el('div'); tarih.style.cssText='font-size:11px;color:#64748b'; tarih.textContent=u.tarih;
-    sol.append(ad,tarih);
-
-    const sagGrp=el('div'); sagGrp.style.cssText='display:flex;gap:4px';
-    const duzenle=el('button','mini-btn'); duzenle.textContent='✏️';
-    duzenle.onclick=()=>{ state.modal={tip:'urun',veri:{...u}}; render(); };
-    const sil=el('button','mini-btn'); sil.textContent='🗑️'; sil.style.color='#ef4444';
-    sil.onclick=()=>{ 
-      state.urunler=state.urunler.filter(x=>x.id!==u.id); 
-      kaydet('urun_listesi',state.urunler); 
-      fbSil('urunler', u.id);
-      render(); 
-    };
-    sagGrp.append(duzenle,sil);
-    ust2.append(sol,sagGrp); kart.appendChild(ust2);
-
-    const linkler=el('div'); linkler.style.cssText='display:flex;gap:8px;margin-top:10px;flex-wrap:wrap';
-    if(u.videoLink){
-      const vl=document.createElement('a'); vl.href=u.videoLink; vl.target='_blank';
-      vl.style.cssText='font-size:12px;color:#60a5fa;text-decoration:none;background:#1e3a5f;padding:4px 10px;border-radius:20px';
-      vl.textContent='▶ Video'; linkler.appendChild(vl);
-    }
-    if(u.sosyalLink){
-      const sl=document.createElement('a'); sl.href=u.sosyalLink; sl.target='_blank';
-      sl.style.cssText='font-size:12px;color:#a78bfa;text-decoration:none;background:#2d1b69;padding:4px 10px;border-radius:20px';
-      sl.textContent='📱 Sosyal Medya'; linkler.appendChild(sl);
-    }
-    if(linkler.children.length>0) kart.appendChild(linkler);
-    if(u.not){
-      const notEl=el('div'); notEl.style.cssText='font-size:12px;color:#94a3b8;margin-top:8px;padding-top:8px;border-top:1px solid #334155';
-      notEl.textContent='📝 '+u.not; kart.appendChild(notEl);
-    }
-    main.appendChild(kart);
-  });
-}
-
-function renderUrunModal(app){
-  const u=state.modal.veri;
-  const ov=el('div','overlay');
-  ov.onclick=e=>{if(e.target===ov){state.modal=null;render();}};
-  const modal=el('div','modal');
-
-  const mh=el('div','modal-header');
-  const mt=el('div','modal-title'); mt.textContent=u.ad?'Ürünü Düzenle':'Yeni Ürün Keşfi';
-  const mk=el('button','modal-kapat'); mk.textContent='✕'; mk.onclick=()=>{state.modal=null;render();};
-  mh.append(mt,mk); modal.appendChild(mh);
-
-  [
-    ['ad','Ürün Adı','AirPods Pro, Kedi Yatağı...','text'],
-    ['videoLink','Video Linki (TikTok/YouTube)','https://...','url'],
-    ['sosyalLink','Sosyal Medya Linki','https://...','url'],
-    ['not','Not','Neden ilginç buldun?','text'],
-  ].forEach(([key,lbl,ph,type])=>{
-    const g=el('div','form-row');
-    const l=el('label','label'); l.textContent=lbl;
-    const inp=document.createElement('input');
-    inp.type=type; inp.value=u[key]||''; inp.placeholder=ph; inp.className='input';
-    inp.oninput=e=>{ state.modal.veri[key]=e.target.value; };
-    g.append(l,inp); modal.appendChild(g);
-  });
-
-  const footer=el('div','modal-footer');
-  const iptal=el('button','iptal-btn'); iptal.textContent='İptal'; iptal.onclick=()=>{state.modal=null;render();};
-  const kaydetBtn=el('button','kaydet-btn'); kaydetBtn.textContent='Kaydet';
-  kaydetBtn.onclick=()=>{
-    if(!state.modal.veri.ad){ bildirimGoster('Ürün adı gerekli','uyari'); return; }
-    const idx=state.urunler.findIndex(x=>x.id===state.modal.veri.id);
-    if(idx>=0) state.urunler[idx]=state.modal.veri;
-    else state.urunler.unshift(state.modal.veri);
-    kaydet('urun_listesi',state.urunler);
-    fbKaydet('urunler', state.modal.veri.id, state.modal.veri);
-    state.modal=null; render();
-    bildirimGoster('Ürün kaydedildi ✓');
-  };
-  footer.append(iptal,kaydetBtn); modal.appendChild(footer);
-  ov.appendChild(modal); app.appendChild(ov);
-}
-
-// ── Haftalık/Aylık Rapor ──────────────────────────────────────────────────────
-function haftalikRaporOlustur(){
-  const bugun=new Date();
-  const haftaBasi=new Date(bugun); haftaBasi.setDate(bugun.getDate()-6);
-  let html=`<div style="font-family:sans-serif;max-width:700px;margin:auto;padding:32px;background:#f8fafc">
-  <h1 style="color:#0f172a">📊 Haftalık Özet Raporu</h1>
-  <p style="color:#64748b">${haftaBasi.toLocaleDateString('tr-TR')} – ${bugun.toLocaleDateString('tr-TR')}</p><hr>`;
-
-  let toplamBlok=0, toplamTam=0;
-  for(let i=6;i>=0;i--){
-    const d=new Date(bugun); d.setDate(bugun.getDate()-i);
-    const key='plan_'+d.toISOString().split('T')[0];
-    const bloklar=yukle(key,[]);
-    if(bloklar.length===0)continue;
-    const tam=bloklar.filter(b=>b.tamamlandi===true).length;
-    toplamBlok+=bloklar.length; toplamTam+=tam;
-    const basari=Math.round(tam/bloklar.length*100);
-    html+=`<h3 style="color:#1e293b;margin-top:20px">${d.toLocaleDateString('tr-TR',{weekday:'long',day:'numeric',month:'long'})}</h3>`;
-    html+=`<p style="color:#64748b">Başarı: <strong style="color:${basari>=80?'#22c55e':basari>=50?'#f59e0b':'#ef4444'}">${basari}%</strong> (${tam}/${bloklar.length})</p>`;
-    html+=`<ul style="margin:8px 0;padding-left:20px">`;
-    bloklar.forEach(b=>{
-      const ikon=b.tamamlandi===true?'✅':b.tamamlandi===false?'❌':'⬜';
-      html+=`<li style="color:#475569;margin:4px 0">${ikon} ${b.baslangic}–${b.bitis} ${b.baslik}</li>`;
+    setBlocks((prev) => {
+      const exists = prev.some((b) => b.id === savedBlock.id);
+      const next = exists ? prev.map((b) => (b.id === savedBlock.id ? savedBlock : b)) : [...prev, savedBlock];
+      return next.sort((a, b) => a.start.localeCompare(b.start));
     });
-    html+='</ul>';
-  }
-  const genelBasari=toplamBlok>0?Math.round(toplamTam/toplamBlok*100):0;
-  html+=`<hr><h2 style="color:#0f172a">Genel: ${genelBasari}% başarı (${toplamTam}/${toplamBlok} aktivite)</h2>`;
-
-  if(state.notlar.length>0){
-    html+=`<h2 style="color:#0f172a;margin-top:24px">📚 Bu Haftaki Notlar</h2>`;
-    state.notlar.slice(0,5).forEach(n=>{
-      html+=`<div style="background:white;border-radius:8px;padding:12px;margin:8px 0;border-left:3px solid #f59e0b">
-      <strong>${n.baslik}</strong><br><em style="color:#94a3b8">${n.tarih}</em><br>
-      <p style="color:#475569;margin-top:8px">${(n.ozet||'').slice(0,300)}...</p></div>`;
-    });
+    setModalBlock(null);
   }
 
-  if(state.urunler.length>0){
-    html+=`<h2 style="color:#0f172a;margin-top:24px">🛍️ Keşfedilen Ürünler</h2><ul style="padding-left:20px">`;
-    state.urunler.slice(0,10).forEach(u=>{
-      html+=`<li style="margin:6px 0;color:#475569">${u.ad}${u.not?' — '+u.not:''}</li>`;
-    });
-    html+='</ul>';
+  async function deleteBlock(block) {
+    if (block.calendarEventId && google.connected) {
+      setLoading(true);
+      try {
+        await apiFetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${block.calendarEventId}`, google.accessToken, { method: "DELETE" });
+      } catch (error) {
+        notify(`Calendar silme hatası: ${error.message}`, "error");
+      } finally {
+        setLoading(false);
+      }
+    }
+    setBlocks((prev) => prev.filter((b) => b.id !== block.id));
   }
-  html+='</div>';
-  return html;
+
+  function setStatus(id, status) {
+    setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, status: b.status === status ? null : status } : b)));
+  }
+
+  async function saveNote(note) {
+    const newNote = { ...note, id: uid(), createdAt: nowTR() };
+    setNotes((prev) => [newNote, ...prev]);
+    notify("Not kaydedildi ✓", "success");
+  }
+
+  async function saveNoteToGoogleDoc(note) {
+    if (!google.connected) return notify("Önce Google hesabına bağlan", "warning");
+    setLoading(true);
+    try {
+      const title = `Günüm Not — ${note.title || nowTR()}`;
+      const content = `${title}
+
+Tarih: ${note.createdAt || nowTR()}
+
+Orijinal Metin:
+${note.sourceText || "—"}
+
+AI Özeti:
+${note.aiSummary || "—"}`;
+      const doc = await createGoogleDoc({ accessToken: google.accessToken, title, content });
+      setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, googleDocId: doc.documentId } : n)));
+      notify("Google Docs'a kaydedildi ✓", "success");
+    } catch (error) {
+      notify(`Docs hatası: ${error.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveProduct(product) {
+    const normalized = { ...product, id: uid(), createdAt: nowTR() };
+    if (!normalized.name.trim()) return notify("Ürün adı boş olamaz", "warning");
+    setProducts((prev) => [normalized, ...prev]);
+
+    if (google.connected && settings.productSheetId) {
+      setLoading(true);
+      try {
+        await appendProductToSheet({ accessToken: google.accessToken, spreadsheetId: settings.productSheetId, product: normalized });
+        notify("Ürün Google Sheets'e kaydedildi ✓", "success");
+      } catch (error) {
+        notify(`Sheets hatası: ${error.message}`, "error");
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      notify("Ürün yerel olarak kaydedildi ✓", "success");
+    }
+  }
+
+  async function makeProductSheet() {
+    if (!google.connected) return notify("Önce Google hesabına bağlan", "warning");
+    setLoading(true);
+    try {
+      const spreadsheetId = await createProductSpreadsheet(google.accessToken);
+      setSettings((prev) => ({ ...prev, productSheetId: spreadsheetId }));
+      notify("Ürünler için Google Sheet oluşturuldu ✓", "success");
+    } catch (error) {
+      notify(`Sheet oluşturma hatası: ${error.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function makePlanSheet() {
+    if (!google.connected) return notify("Önce Google hesabına bağlan", "warning");
+    setLoading(true);
+    try {
+      const spreadsheetId = await createPlanSpreadsheet(google.accessToken);
+      setSettings((prev) => ({ ...prev, planSheetId: spreadsheetId }));
+      notify("Günlük plan için Google Sheet oluşturuldu ✓", "success");
+    } catch (error) {
+      notify(`Plan Sheet oluşturma hatası: ${error.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function sendDailyReportEmail() {
+    if (!google.connected) return notify("Önce Google hesabına bağlan", "warning");
+    if (!settings.email) return notify("Rapor e-posta adresi eksik", "warning");
+    setLoading(true);
+    try {
+      const html = `<div style="font-family:Arial,sans-serif;background:#f8fafc;padding:28px;max-width:720px;margin:auto"><h1>Günüm Raporu</h1><p>${formatDateTR(date)}</p><ul><li>Planlanan aktivite: ${report.total}</li><li>Tamamlanan: ${report.completed}</li><li>Kaçırılan: ${report.missed}</li><li>Başarı: ${report.score}%</li><li>Toplam not: ${report.notes}</li><li>Toplam ürün fikri: ${report.products}</li></ul></div>`;
+      const raw = [
+        `To: ${settings.email}`,
+        "Content-Type: text/html; charset=utf-8",
+        "MIME-Version: 1.0",
+        `Subject: =?utf-8?B?${encodeBase64UrlUnicode(`Günüm Rapor — ${date}`)}?=`,
+        "",
+        html,
+      ].join("\n");
+      await apiFetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", google.accessToken, { method: "POST", body: JSON.stringify({ raw: encodeBase64UrlUnicode(raw) }) });
+      notify("Rapor Gmail ile gönderildi ✓", "success");
+    } catch (error) {
+      notify(`Mail hatası: ${error.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={styles.shell}>
+      <div style={styles.windowBar}><span style={{ background: "#ff5f57" }} /><span style={{ background: "#febc2e" }} /><span style={{ background: "#28c840" }} /></div>
+      <div style={styles.app}>
+        {toast && <Toast toast={toast} />}
+        {loading && <Loading />}
+
+        <section style={styles.dateBar}>
+          <button onClick={previousDay} style={styles.dateButton}>‹</button>
+          <input value={date} onChange={(e) => setDate(e.target.value)} type="date" style={styles.dateInput} />
+          <button onClick={nextDay} style={styles.dateButton}>›</button>
+        </section>
+
+        <nav style={styles.tabs}>
+          {[
+            ["plan", "📋", "Plan"],
+            ["notes", "📸", "Notlar"],
+            ["products", "🛍️", "Ürünler"],
+            ["report", "📊", "Rapor"],
+            ["settings", "⚙️", "Ayarlar"],
+          ].map(([id, emoji, label]) => (
+            <button key={id} onClick={() => setScreen(id)} style={{ ...styles.tab, ...(screen === id ? styles.activeTab : {}) }}>
+              <span style={{ fontSize: 22 }}>{emoji}</span>
+              <small>{label}</small>
+            </button>
+          ))}
+        </nav>
+
+        <main style={styles.main}>
+          {screen === "plan" && <PlanScreen blocks={blocks} report={report} onAdd={openNewBlock} onEdit={(b) => setModalBlock({ ...b })} onDelete={deleteBlock} onStatus={setStatus} onApplyTemplate={applyTemplate} onSaveTemplate={saveTodayAsTemplate} autoDefault={settings.autoApplyDefaultPlan} onToggleAutoDefault={toggleAutoDefaultPlan} templates={[...READY_TEMPLATES, ...customTemplates]} defaultTemplateId={defaultTemplateId} setDefaultTemplateId={setDefaultTemplateId} />}
+          {screen === "notes" && <NotesScreen notes={notes} setNotes={setNotes} settings={settings} onSave={saveNote} onSaveDoc={saveNoteToGoogleDoc} setLoading={setLoading} notify={notify} />}
+          {screen === "products" && <ProductsScreen products={products} onSave={saveProduct} onDelete={(id) => setProducts((prev) => prev.filter((p) => p.id !== id))} makeProductSheet={makeProductSheet} hasSheet={Boolean(settings.productSheetId)} />}
+          {screen === "report" && <ReportScreen blocks={blocks} notes={notes} products={products} report={report} reportView={reportView} setReportView={setReportView} onSend={sendDailyReportEmail} />}
+          {screen === "settings" && <SettingsScreen settings={settings} setSettings={setSettings} google={google} makeProductSheet={makeProductSheet} makePlanSheet={makePlanSheet} />}
+        </main>
+
+        {modalBlock && <BlockModal block={modalBlock} onClose={() => setModalBlock(null)} onSave={saveBlock} loading={loading} />}
+      </div>
+    </div>
+  );
 }
 
-async function haftalikRaporGonder(){
-  if(!state.giris||!state.accessToken){bildirimGoster('Önce Google hesabına giriş yap','uyari');return;}
-  if(!state.ayarlar.email){bildirimGoster('Ayarlardan e-posta adresini gir','uyari');return;}
-  yukleniyor(true);
-  const html=haftalikRaporOlustur();
-  const konu='Haftalık Rapor — '+new Date().toLocaleDateString('tr-TR');
-  const mesaj=['To: '+state.ayarlar.email,'Content-Type: text/html; charset=utf-8','MIME-Version: 1.0',
-    'Subject: =?utf-8?B?'+btoa(unescape(encodeURIComponent(konu)))+'?=','',html].join('\n');
-  const encoded=btoa(unescape(encodeURIComponent(mesaj))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  try{
-    const res=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{
-      method:'POST',
-      headers:{'Authorization':'Bearer '+state.accessToken,'Content-Type':'application/json'},
-      body:JSON.stringify({raw:encoded}),
-    });
-    if(!res.ok)throw new Error((await res.json()).error?.message);
-    bildirimGoster('Haftalık rapor gönderildi ✓');
-  }catch(e){bildirimGoster('Mail hatası: '+e.message,'hata');}
-  yukleniyor(false);
+function Toast({ toast }) {
+  const bg = toast.type === "error" ? "#ef4444" : toast.type === "warning" ? "#f59e0b" : "#22c55e";
+  return <div style={{ ...styles.toast, background: bg }}>{toast.message}</div>;
 }
 
-function haftalikRaporIndir(){
-  const html=haftalikRaporOlustur();
-  const blob=new Blob([html],{type:'text/html'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='haftalik-rapor-'+new Date().toISOString().split('T')[0]+'.html';
-  a.click();
-  bildirimGoster('Rapor indirildi ✓');
+function Loading() {
+  return <div style={styles.loadingOverlay}><div style={styles.loadingBox}>İşleniyor...</div></div>;
 }
 
+function PlanScreen({ blocks, report, onAdd, onEdit, onDelete, onStatus, onApplyTemplate, onSaveTemplate, autoDefault, onToggleAutoDefault, templates, defaultTemplateId, setDefaultTemplateId }) {
+  return (
+    <div>
+      <div style={styles.sectionTop}>
+        <span>{blocks.length} aktivite · {Math.floor(report.totalMinutes / 60)}s {report.totalMinutes % 60}dk planlandı</span>
+        <button onClick={onSaveTemplate} style={styles.secondaryButton}>💾 Şablon Kaydet</button>
+      </div>
 
-function el(tag,cls=''){
-  const e=document.createElement(tag);
-  if(cls) e.className=cls;
-  return e;
+      <div style={styles.templatePanel}>
+        <div style={styles.templateHeader}>⚡ Gün Şablonu</div>
+        <div style={styles.templateControls}>
+          <select value={defaultTemplateId} onChange={(e) => setDefaultTemplateId(e.target.value)} style={styles.input}>
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <button onClick={() => onApplyTemplate(defaultTemplateId)} style={styles.secondaryButton}>Bugüne Uygula</button>
+        </div>
+        <button onClick={onToggleAutoDefault} style={{ ...styles.autoButton, background: autoDefault ? "#22c55e22" : "#334155", color: autoDefault ? "#22c55e" : "#cbd5e1" }}>
+          {autoDefault ? "✓ Boş günlere otomatik uygula açık" : "Boş günlere otomatik uygula"}
+        </button>
+      </div>
+
+      {!blocks.length ? <Empty icon="🗓️" text="Henüz plan yok. Hazır şablonu bugüne uygulayabilir veya yeni blok ekleyebilirsin." /> : <div style={styles.list}>{blocks.map((b) => <BlockCard key={b.id} block={b} onEdit={() => onEdit(b)} onDelete={() => onDelete(b)} onStatus={onStatus} />)}</div>}
+      <button onClick={onAdd} style={styles.primaryButton}>+ Yeni Blok Ekle</button>
+    </div>
+  );
 }
 
-// ── Başlat ────────────────────────────────────────────────────────────────────
-// render() Firebase auth callback'ten çağrılıyor, burada çağırmıyoruz
-if(state.ayarlar.clientId && state.ayarlar.apiKey) gapiBaslat();
-</script>
-</body>
-</html>
+function BlockCard({ block, onEdit, onDelete, onStatus }) {
+  const cat = categoryById(block.category);
+  const borderColor = block.status === true ? "#22c55e" : block.status === false ? "#ef4444" : cat.color;
+  return (
+    <article style={{ ...styles.card, borderLeftColor: borderColor, opacity: block.status === false ? 0.72 : 1 }}>
+      <div style={styles.statusColumn}>
+        <button onClick={() => onStatus(block.id, true)} style={{ ...styles.statusButton, borderColor: "#22c55e", background: block.status === true ? "#22c55e" : "transparent" }}>✓</button>
+        <button onClick={() => onStatus(block.id, false)} style={{ ...styles.statusButton, borderColor: "#ef4444", background: block.status === false ? "#ef4444" : "transparent" }}>✕</button>
+      </div>
+      <div style={styles.cardBody}>
+        <strong>{cat.emoji} {block.title}</strong>
+        <div style={styles.meta}>{block.start} – {block.end} <span style={{ color: cat.color }}>{durationText(block.start, block.end)}</span> {block.calendarEventId ? "📅" : ""}</div>
+        {block.note && <p style={styles.note}>{block.note}</p>}
+      </div>
+      <div style={styles.cardActions}><button onClick={onEdit} style={styles.iconButton}>✏️</button><button onClick={onDelete} style={{ ...styles.iconButton, color: "#ef4444" }}>🗑️</button></div>
+    </article>
+  );
+}
+
+function BlockModal({ block, onClose, onSave, loading }) {
+  const [form, setForm] = useState(block);
+  const set = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+  return (
+    <div style={styles.modalOverlay}>
+      <div style={styles.modalBox}>
+        <div style={styles.modalHeader}><h3>{block.title ? "Bloğu Düzenle" : "Yeni Blok"}</h3><button onClick={onClose} style={styles.closeButton}>✕</button></div>
+        <label style={styles.label}>Başlık</label><input value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Sabah yürüyüşü..." style={styles.input} />
+        <div style={styles.twoCols}><div><label style={styles.label}>Başlangıç</label><input type="time" value={form.start} onChange={(e) => set("start", e.target.value)} style={styles.input} /></div><div><label style={styles.label}>Bitiş</label><input type="time" value={form.end} onChange={(e) => set("end", e.target.value)} style={styles.input} /></div></div>
+        <label style={styles.label}>Kategori</label><div style={styles.categoryGrid}>{CATEGORIES.map((c) => <button key={c.id} onClick={() => set("category", c.id)} style={{ ...styles.categoryPill, borderColor: form.category === c.id ? c.color : "transparent", color: form.category === c.id ? c.color : "#94a3b8", background: form.category === c.id ? `${c.color}22` : "#0f172a" }}>{c.emoji} {c.label}</button>)}</div>
+        <label style={styles.label}>Not</label><textarea value={form.note} onChange={(e) => set("note", e.target.value)} rows={3} placeholder="Ek not..." style={{ ...styles.input, resize: "vertical" }} />
+        <div style={styles.modalFooter}><button onClick={onClose} style={styles.cancelButton}>İptal</button><button onClick={() => onSave(form)} disabled={loading} style={styles.saveButton}>{loading ? "Kaydediliyor..." : "Kaydet"}</button></div>
+      </div>
+    </div>
+  );
+}
+
+function NotesScreen({ notes, setNotes, settings, onSave, onSaveDoc, setLoading, notify }) {
+  const [title, setTitle] = useState("");
+  const [sourceText, setSourceText] = useState("");
+  const [imageFile, setImageFile] = useState(null);
+  const [aiSummary, setAiSummary] = useState("");
+
+  async function analyze() {
+    if (!sourceText.trim() && !imageFile) return notify("Önce metin yaz veya görsel yükle", "warning");
+    setLoading(true);
+    try {
+      const result = await analyzeNoteWithAI({ apiKey: settings.openAiKey, model: settings.aiModel, text: sourceText, imageFile });
+      setAiSummary(result);
+      notify("AI özeti hazır ✓", "success");
+    } catch (error) {
+      notify(`AI hatası: ${error.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveCurrent() {
+    if (!sourceText.trim() && !aiSummary.trim()) return notify("Kaydedilecek not yok", "warning");
+    await onSave({ title: title || "Kitap Notu", sourceText, aiSummary });
+    setTitle(""); setSourceText(""); setImageFile(null); setAiSummary("");
+  }
+
+  return (
+    <div>
+      <div style={styles.sectionTop}><span>{notes.length} not</span></div>
+      <div style={styles.dropBox}>
+        <div style={{ fontSize: 38 }}>📸</div>
+        <strong>Kitap sayfası görseli yükle veya metin yapıştır</strong>
+        <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} style={styles.fileInput} />
+        {imageFile && <span style={styles.miniInfo}>{imageFile.name}</span>}
+      </div>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Not başlığı" style={styles.input} />
+      <textarea value={sourceText} onChange={(e) => setSourceText(e.target.value)} rows={5} placeholder="Okuduğun metni, sözü veya alıntıyı buraya yaz..." style={{ ...styles.input, resize: "vertical", marginTop: 10 }} />
+      <div style={styles.buttonRow}><button onClick={analyze} style={styles.primaryButton}>✨ AI Özetle</button><button onClick={saveCurrent} style={styles.secondaryButton}>💾 Kaydet</button></div>
+      {aiSummary && <div style={styles.resultBox}><h3>AI Özeti</h3><pre>{aiSummary}</pre></div>}
+      {!notes.length ? <Empty icon="📚" text="Henüz not yok. Bir kitap sayfası veya alıntı ekle." /> : <div style={styles.list}>{notes.map((n) => <article key={n.id} style={styles.card}><div style={styles.cardBody}><strong>{n.title}</strong><div style={styles.meta}>{n.createdAt}</div><p style={styles.note}>{n.aiSummary || n.sourceText}</p></div><div style={styles.cardActions}><button onClick={() => onSaveDoc(n)} style={styles.secondaryButton}>Word</button><button onClick={() => setNotes((prev) => prev.filter((x) => x.id !== n.id))} style={{ ...styles.iconButton, color: "#ef4444" }}>🗑️</button></div></article>)}</div>}
+    </div>
+  );
+}
+
+function ProductsScreen({ products, onSave, onDelete, makeProductSheet, hasSheet }) {
+  const [form, setForm] = useState({ ...EMPTY_PRODUCT });
+  const set = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
+  function submit() {
+    onSave(form);
+    setForm({ ...EMPTY_PRODUCT });
+  }
+
+  return (
+    <div>
+      <div style={styles.sectionTop}><span>{products.length} ürün kaydedildi</span><button onClick={makeProductSheet} style={styles.secondaryButton}>{hasSheet ? "Sheets bağlı" : "+ Sheet Oluştur"}</button></div>
+      <div style={styles.formCard}>
+        <label style={styles.label}>Ürün adı</label><input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Örn: Lenticular poster" style={styles.input} />
+        <label style={styles.label}>Sosyal medya linki</label><input value={form.socialUrl} onChange={(e) => set("socialUrl", e.target.value)} placeholder="TikTok / Instagram / X linki" style={styles.input} />
+        <label style={styles.label}>Ürün / tedarik linki</label><input value={form.productUrl} onChange={(e) => set("productUrl", e.target.value)} placeholder="AliExpress / Trendyol / Hepsiburada linki" style={styles.input} />
+        <div style={styles.twoCols}><div><label style={styles.label}>Pazaryeri</label><input value={form.marketplace} onChange={(e) => set("marketplace", e.target.value)} placeholder="AliExpress" style={styles.input} /></div><div><label style={styles.label}>Viral puanı</label><input value={form.viralScore} onChange={(e) => set("viralScore", e.target.value)} placeholder="1-10" style={styles.input} /></div></div>
+        <label style={styles.label}>Potansiyel</label><select value={form.potential} onChange={(e) => set("potential", e.target.value)} style={styles.input}><option>Düşük</option><option>Orta</option><option>Yüksek</option><option>Çok Yüksek</option></select>
+        <label style={styles.label}>Not</label><textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} placeholder="Neden viral olabilir? Türkiye pazarı uygun mu? Üretilebilir mi?" style={{ ...styles.input, resize: "vertical" }} />
+        <button onClick={submit} style={styles.primaryButton}>+ Ürünü Kaydet</button>
+      </div>
+      {!products.length ? <Empty icon="🛍️" text="Henüz ürün yok. Araştırırken karşılaştığın ürünleri kaydet." /> : <div style={styles.list}>{products.map((p) => <article key={p.id} style={{ ...styles.card, borderLeftColor: p.potential === "Çok Yüksek" || p.potential === "Yüksek" ? "#22c55e" : "#f59e0b" }}><div style={styles.cardBody}><strong>{p.name}</strong><div style={styles.meta}>{p.createdAt} · {p.marketplace || "Pazaryeri yok"} · Viral: {p.viralScore || "—"} · {p.potential}</div><p style={styles.note}>{p.notes || p.productUrl || p.socialUrl}</p></div><button onClick={() => onDelete(p.id)} style={{ ...styles.iconButton, color: "#ef4444" }}>🗑️</button></article>)}</div>}
+    </div>
+  );
+}
+
+function ReportScreen({ notes, products, report, reportView, setReportView, onSend }) {
+  const latestNotes = notes.slice(0, 5);
+  const latestProducts = products.slice(0, 5);
+  return (
+    <div>
+      <div style={styles.summaryGrid}><SummaryBox label="Tamamlandı" value={report.completed} color="#22c55e" /><SummaryBox label="Ürün" value={report.products} color="#60a5fa" /><SummaryBox label="Not" value={report.notes} color="#f59e0b" /></div>
+      <div style={styles.buttonRow}><button onClick={() => setReportView("latestProducts")} style={styles.secondaryButton}>Son Ürünler</button><button onClick={() => setReportView("latestNotes")} style={styles.secondaryButton}>Son Notlar</button><button onClick={() => setReportView("overview")} style={styles.secondaryButton}>Genel</button></div>
+      {reportView === "overview" && <Empty icon="📊" text={`Bugünkü başarı: %${report.score}. Toplam ürün fikri: ${report.products}. Toplam not: ${report.notes}.`} />}
+      {reportView === "latestProducts" && <div style={styles.list}>{latestProducts.map((p) => <article key={p.id} style={styles.card}><div style={styles.cardBody}><strong>{p.name}</strong><div style={styles.meta}>{p.createdAt} · {p.potential}</div><p style={styles.note}>{p.notes || p.productUrl}</p></div></article>)}</div>}
+      {reportView === "latestNotes" && <div style={styles.list}>{latestNotes.map((n) => <article key={n.id} style={styles.card}><div style={styles.cardBody}><strong>{n.title}</strong><div style={styles.meta}>{n.createdAt}</div><p style={styles.note}>{n.aiSummary || n.sourceText}</p></div></article>)}</div>}
+      <button onClick={onSend} style={styles.primaryButton}>📧 Gmail ile Genel Rapor Gönder</button>
+    </div>
+  );
+}
+
+function SummaryBox({ value, label, color }) {
+  return <div style={{ ...styles.summaryBox, borderColor: color }}><strong style={{ color }}>{value}</strong><span>{label}</span></div>;
+}
+
+function SettingsScreen({ settings, setSettings, google, makeProductSheet, makePlanSheet }) {
+  const set = (field, value) => setSettings((prev) => ({ ...prev, [field]: value }));
+  return (
+    <div>
+      <div style={styles.settingsCard}><h3>📅 Google Takvim & Gmail Bağlantısı</h3><button onClick={google.connected ? google.signOut : google.signIn} style={styles.primaryButton}>{google.connected ? "🔗 Google Bağlı — Çıkış Yap" : "🔗 Google Hesabına Bağlan"}</button></div>
+      <div style={styles.settingsCard}><h3>📌 Google API Kurulumu</h3><p>Google Cloud Console’da Calendar API, Gmail API, Google Docs API ve Google Sheets API etkin olmalı.</p><p>Authorized JavaScript origins: <b>https://oguzzata29-creator.github.io</b></p><label style={styles.label}>Google Client ID</label><input value={settings.clientId} onChange={(e) => set("clientId", e.target.value)} placeholder="xxxx.apps.googleusercontent.com" style={styles.input} /><label style={styles.label}>Rapor E-posta Adresi</label><input value={settings.email} onChange={(e) => set("email", e.target.value)} placeholder="sen@gmail.com" style={styles.input} /></div>
+      <div style={styles.settingsCard}><h3>📋 Günlük Plan Google Sheet</h3><label style={styles.label}>Plan Spreadsheet ID</label><input value={settings.planSheetId || ""} onChange={(e) => set("planSheetId", e.target.value)} placeholder="Günlük Plan Sheet ID" style={styles.input} /><button onClick={makePlanSheet} style={styles.secondaryButton}>+ Yeni Plan Sheet Oluştur</button><button onClick={() => set("autoSavePlanToSheet", !settings.autoSavePlanToSheet)} style={{ ...styles.secondaryButton, marginLeft: 8, background: settings.autoSavePlanToSheet ? "#22c55e22" : "#334155", color: settings.autoSavePlanToSheet ? "#22c55e" : "#cbd5e1" }}>{settings.autoSavePlanToSheet ? "✓ Calendar ile Sheet'e de yaz" : "Sheet otomatik kapalı"}</button></div>
+      <div style={styles.settingsCard}><h3>🛍️ Ürün Google Sheet</h3><label style={styles.label}>Spreadsheet ID</label><input value={settings.productSheetId} onChange={(e) => set("productSheetId", e.target.value)} placeholder="Google Sheet ID" style={styles.input} /><button onClick={makeProductSheet} style={styles.secondaryButton}>+ Yeni Ürün Sheet Oluştur</button></div>
+      <div style={styles.settingsCard}><h3>🤖 AI Ayarları</h3><label style={styles.label}>OpenAI API Key</label><input type="password" value={settings.openAiKey} onChange={(e) => set("openAiKey", e.target.value)} placeholder="sk-..." style={styles.input} /><label style={styles.label}>AI Model</label><input value={settings.aiModel} onChange={(e) => set("aiModel", e.target.value)} placeholder="gpt-4o-mini" style={styles.input} /><div style={styles.warning}>⚠️ Bu tek dosyalık GitHub Pages prototipinde API key tarayıcıda tutulur. Yayın aşamasında backend/proxy kullan.</div></div>
+    </div>
+  );
+}
+
+function Empty({ icon, text }) {
+  return <div style={styles.empty}><div>{icon}</div><p>{text}</p></div>;
+}
+
+const styles = {
+  shell: { minHeight: "100vh", background: "#e5e7eb", padding: 28, boxSizing: "border-box", display: "flex", justifyContent: "center", alignItems: "flex-start", fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" },
+  windowBar: { position: "fixed", top: 28, width: "min(1120px, calc(100vw - 56px))", height: 54, background: "#f3f4f6", borderRadius: "16px 16px 0 0", display: "flex", alignItems: "center", gap: 10, paddingLeft: 18, boxSizing: "border-box", boxShadow: "0 20px 60px rgba(0,0,0,.18)" },
+  app: { marginTop: 54, width: "min(1120px, calc(100vw - 56px))", minHeight: "calc(100vh - 110px)", background: "#0f172a", color: "#e2e8f0", borderRadius: "0 0 16px 16px", padding: "28px min(9vw, 96px) 70px", boxSizing: "border-box", boxShadow: "0 20px 60px rgba(0,0,0,.18)" },
+  dateBar: { display: "flex", gap: 14, justifyContent: "center", marginBottom: 26 },
+  dateButton: { width: 64, height: 52, border: 0, borderRadius: 14, background: "#1e293b", color: "#94a3b8", fontSize: 28, cursor: "pointer" },
+  dateInput: { width: "min(620px, 70vw)", background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", borderRadius: 14, padding: "10px 18px", textAlign: "center", fontSize: 22, fontWeight: 900, letterSpacing: 3 },
+  tabs: { display: "flex", gap: 18, borderBottom: "1px solid #334155", marginBottom: 22 },
+  tab: { minWidth: 100, display: "flex", flexDirection: "column", gap: 7, alignItems: "center", padding: "0 8px 18px", color: "#64748b", background: "transparent", border: 0, cursor: "pointer", fontSize: 18, fontWeight: 800 },
+  activeTab: { color: "#3b82f6", borderBottom: "4px solid #3b82f6" },
+  main: { maxWidth: 820 },
+  sectionTop: { display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: 18, fontWeight: 800, marginBottom: 20 },
+  templatePanel: { background: "#1e293b", borderRadius: 16, padding: 16, marginBottom: 18, border: "1px solid #334155" },
+  templateHeader: { color: "#e2e8f0", fontSize: 16, fontWeight: 900, marginBottom: 12 },
+  templateControls: { display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center" },
+  autoButton: { width: "100%", marginTop: 10, border: "1px solid #ffffff18", borderRadius: 12, padding: "11px 12px", fontSize: 14, fontWeight: 900, cursor: "pointer" },
+  list: { display: "flex", flexDirection: "column", gap: 12, marginTop: 18 },
+  card: { display: "flex", gap: 12, alignItems: "center", background: "#1e293b", borderRadius: 14, borderLeft: "4px solid #334155", padding: "14px 16px" },
+  cardBody: { flex: 1, minWidth: 0 },
+  meta: { fontSize: 13, color: "#94a3b8", marginTop: 5 },
+  note: { fontSize: 13, color: "#94a3b8", margin: "7px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  cardActions: { display: "flex", gap: 7 },
+  iconButton: { background: "transparent", border: 0, color: "#94a3b8", cursor: "pointer", fontSize: 17 },
+  statusColumn: { display: "flex", flexDirection: "column", gap: 5 },
+  statusButton: { width: 24, height: 24, borderRadius: 7, border: "1.5px solid", color: "white", cursor: "pointer" },
+  primaryButton: { width: "100%", marginTop: 14, padding: 15, border: 0, borderRadius: 14, background: "linear-gradient(135deg,#2563eb,#3b82f6)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" },
+  secondaryButton: { background: "#334155", color: "#cbd5e1", border: 0, borderRadius: 10, padding: "9px 14px", fontSize: 14, fontWeight: 800, cursor: "pointer" },
+  buttonRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 },
+  empty: { padding: "70px 20px", textAlign: "center", color: "#94a3b8", fontSize: 20, fontWeight: 800, lineHeight: 1.6 },
+  dropBox: { border: "2px dashed #334155", borderRadius: 18, background: "#1e293b", minHeight: 170, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "#94a3b8", marginBottom: 14 },
+  fileInput: { color: "#94a3b8", maxWidth: 260 },
+  miniInfo: { fontSize: 12, color: "#60a5fa" },
+  resultBox: { marginTop: 14, background: "#1e293b", borderRadius: 16, padding: 16, color: "#cbd5e1" },
+  formCard: { background: "#1e293b", borderRadius: 16, padding: 18, marginBottom: 18 },
+  input: { width: "100%", boxSizing: "border-box", background: "#0f172a", color: "#e2e8f0", border: "1px solid #334155", borderRadius: 12, padding: "12px 14px", outline: "none", fontFamily: "inherit", fontSize: 15 },
+  label: { display: "block", color: "#94a3b8", fontSize: 14, fontWeight: 900, margin: "13px 0 7px" },
+  twoCols: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
+  categoryGrid: { display: "flex", flexWrap: "wrap", gap: 8 },
+  categoryPill: { border: "2px solid transparent", borderRadius: 999, padding: "8px 12px", cursor: "pointer", fontSize: 13 },
+  summaryGrid: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 18, marginBottom: 18 },
+  summaryBox: { background: "#1e293b", borderRadius: 14, borderTop: "3px solid", padding: 24, textAlign: "center" },
+  settingsCard: { background: "#1e293b", borderRadius: 16, padding: 20, color: "#cbd5e1", lineHeight: 1.7, marginBottom: 18 },
+  warning: { background: "#334155", color: "#fbbf24", borderRadius: 12, padding: 12, marginTop: 14, fontSize: 13 },
+  modalOverlay: { position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,.72)", display: "flex", alignItems: "flex-end", justifyContent: "center" },
+  modalBox: { width: "100%", maxWidth: 560, maxHeight: "90vh", overflow: "auto", background: "#1e293b", borderRadius: "22px 22px 0 0", padding: "22px 20px 34px", boxSizing: "border-box" },
+  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  modalFooter: { display: "flex", gap: 10, marginTop: 18 },
+  closeButton: { background: "transparent", border: 0, color: "#94a3b8", fontSize: 20, cursor: "pointer" },
+  cancelButton: { flex: 1, background: "transparent", border: "1px solid #334155", color: "#94a3b8", borderRadius: 11, padding: 12, cursor: "pointer" },
+  saveButton: { flex: 2, background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", border: 0, color: "white", borderRadius: 11, padding: 12, fontWeight: 800, cursor: "pointer" },
+  toast: { position: "fixed", zIndex: 300, left: "50%", top: 42, transform: "translateX(-50%)", color: "white", borderRadius: 999, padding: "10px 18px", fontSize: 13, fontWeight: 800, boxShadow: "0 10px 30px rgba(0,0,0,.35)", whiteSpace: "nowrap" },
+  loadingOverlay: { position: "fixed", inset: 0, zIndex: 250, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center" },
+  loadingBox: { background: "#1e293b", color: "#e2e8f0", borderRadius: 16, padding: "20px 28px", fontWeight: 800 },
+};
